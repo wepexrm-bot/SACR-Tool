@@ -1,18 +1,10 @@
-from altair import param
-from sklearn.base import is_classifier
-from sklearn.discriminant_analysis import StandardScaler
-import streamlit as st 
-import numpy as np 
+import streamlit as st
+import numpy as np
 import seaborn as sns
 import pandas as pd
 import nltk
 from nltk.corpus import stopwords
 import contractions
-import string
-import shap
-shap.initjs()
-import lime
-import lime.lime_text
 import re
 import time
 from fpdf import FPDF
@@ -20,7 +12,6 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.feature_selection import chi2
 from wordcloud import WordCloud
 from collections import Counter
-
 
 try:
     nltk.data.find('corpora/stopwords')
@@ -31,20 +22,12 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from nltk.stem import WordNetLemmatizer
 
-from sklearn.model_selection import train_test_split
-
-from sklearn.decomposition import PCA
-from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, f1_score, roc_auc_score, precision_score, recall_score, accuracy_score,precision_recall_curve
-from sklearn.pipeline import make_pipeline
-from sklearn.pipeline import Pipeline
-from sklearn import model_selection
+from sklearn.metrics import classification_report, f1_score, precision_score, recall_score, accuracy_score
 
 # Enhanced session state management
 def initialize_session_state():

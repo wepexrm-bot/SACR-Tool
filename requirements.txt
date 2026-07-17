@@ -1,10 +1,11 @@
-numpy
+streamlit
 pandas
-seaborn
+numpy
 matplotlib
-plotly
+seaborn
 nltk
 scikit-learn
 wordcloud
-prettytable
-scipy
+contractions
+fpdf
+plotly
