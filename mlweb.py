@@ -18,6 +18,11 @@ try:
 except LookupError:
     nltk.download('stopwords')
 
+try:
+    nltk.data.find('corpora/wordnet')
+except LookupError:
+    nltk.download('wordnet')
+
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from nltk.stem import WordNetLemmatizer
@@ -27,7 +32,8 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, f1_score, precision_score, recall_score, accuracy_score
+from sklearn.metrics import classification_report, f1_score, precision_score, recall_score, accuracy_score, confusion_matrix, ConfusionMatrixDisplay, roc_curve, roc_auc_score
+import joblib
 
 # Enhanced session state management
 def initialize_session_state():
@@ -116,30 +122,6 @@ def compare_models(models_results):
 
 
 
-
-# Export functionality
-def export_results(model, vectorizer, results, model_name):
-    """Export model results"""
-    export_data = {
-        'model_type': model_name,
-        'vectorizer_type': type(vectorizer).__name__,
-        'accuracy': results.get('accuracy', 0),
-        'precision': results.get('precision', 0),
-        'recall': results.get('recall', 0),
-        'f1_score': results.get('f1_score', 0),
-        'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
-    }
-    
-    if st.button("📥 Download Results", key=f"download_{model_name}"):
-        results_df = pd.DataFrame([export_data])
-        csv = results_df.to_csv(index=False)
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name=f"sacr_results_{model_name.lower().replace(' ', '_')}.csv",
-            mime="text/csv",
-            key=f"download_csv_{model_name}"
-        )
 
 st.title("SACR Tool (Sentiment Analysis on Customer Review)")
 
@@ -927,6 +909,77 @@ def web():
                             key=f"download_pdf_{classifier_name}"
                         )
 
+                    # --- Confusion Matrix ---
+                    with st.expander("📊 Confusion Matrix", expanded=False):
+                        cm = confusion_matrix(y_test, y_pred)
+                        fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
+                        ConfusionMatrixDisplay(cm, display_labels=['Negative', 'Positive']).plot(ax=ax_cm)
+                        plt.tight_layout()
+                        st.pyplot(fig_cm)
+
+                    # --- ROC-AUC Curve ---
+                    with st.expander("📈 ROC-AUC Curve", expanded=False):
+                        if hasattr(clf, "predict_proba"):
+                            y_prob = clf.predict_proba(x_test)[:, 1]
+                            fpr, tpr, _ = roc_curve(y_test, y_prob)
+                            auc_score = roc_auc_score(y_test, y_prob)
+
+                            fig_roc, ax_roc = plt.subplots(figsize=(6, 5))
+                            ax_roc.plot(fpr, tpr, label=f"ROC curve (AUC = {auc_score:.4f})")
+                            ax_roc.plot([0, 1], [0, 1], "k--", label="Random")
+                            ax_roc.set_xlabel("False Positive Rate")
+                            ax_roc.set_ylabel("True Positive Rate")
+                            ax_roc.set_title("ROC Curve")
+                            ax_roc.legend()
+                            plt.tight_layout()
+                            st.pyplot(fig_roc)
+                            st.metric("AUC Score", f"{auc_score:.4f}")
+                        else:
+                            st.info(f"{classifier_name} does not support probability predictions.")
+
+                    # --- Download Trained Model ---
+                    with st.expander("💾 Download Trained Model", expanded=False):
+                        model_bytes = joblib.dumps(clf)
+                        st.download_button(
+                            label="⬇️ Download Model (.joblib)",
+                            data=model_bytes,
+                            file_name=f"{classifier_name.lower().replace(' ', '_')}_model.joblib",
+                            mime="application/octet-stream",
+                            key=f"download_model_{classifier_name}"
+                        )
+                        vect_bytes = joblib.dumps(st.session_state.vectorizer)
+                        st.download_button(
+                            label="⬇️ Download Vectorizer (.joblib)",
+                            data=vect_bytes,
+                            file_name=f"{classifier_name.lower().replace(' ', '_')}_vectorizer.joblib",
+                            mime="application/octet-stream",
+                            key=f"download_vect_{classifier_name}"
+                        )
+
+                    # --- Real-time Prediction ---
+                    with st.expander("🔮 Test with Custom Text", expanded=False):
+                        st.markdown("Type a review below to see what the trained model predicts.")
+                        sample_text = st.text_area("Enter your text:", "", height=100,
+                                                    key=f"sample_text_{classifier_name}")
+                        if st.button("Predict Sentiment", key=f"predict_btn_{classifier_name}"):
+                            if sample_text.strip():
+                                stop_words = get_stopwords()
+                                cleaned = clean_text(sample_text, stop_words)
+                                vec = st.session_state.vectorizer.transform([cleaned])
+                                pred = clf.predict(vec)[0]
+                                if hasattr(clf, "predict_proba"):
+                                    proba = clf.predict_proba(vec)[0]
+                                    confidence = proba[int(pred)]
+                                else:
+                                    confidence = None
+
+                                label = "✅ Positive" if pred == 1 else "❌ Negative"
+                                st.success(f"**Prediction:** {label}")
+                                if confidence is not None:
+                                    st.metric("Confidence", f"{confidence:.2%}")
+                                st.caption(f"Cleaned text: _{cleaned[:200]}{'...' if len(cleaned) > 200 else ''}_")
+                            else:
+                                st.warning("Please enter some text to analyze.")
 
 
     elif option == 'Model Comparison':
