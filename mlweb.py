@@ -325,12 +325,9 @@ def web():
 
             except Exception as e:
                 st.error(f"❌ Error loading file: {str(e)}")
-
-
     elif option == 'EDA':
         st.subheader("Exploratory Data Analysis")
 
-        # ⛔ Block access unless preprocessing is done
         if not st.session_state.get("preprocessing_done", False):
             st.warning("⚠️ Please complete the Data Preprocessing section before accessing EDA.")
             st.stop()
@@ -342,7 +339,6 @@ def web():
             data = st.file_uploader("Upload dataset:", type=['csv', 'xlsx', 'txt', 'json'])
             if data is not None:
                 try:
-                    # Handle different file types
                     if data.name.endswith('.csv'):
                         df = pd.read_csv(data)
                     elif data.name.endswith('.xlsx'):
@@ -350,8 +346,7 @@ def web():
                     elif data.name.endswith('.json'):
                         df = pd.read_json(data)
                     else:
-                        df = pd.read_csv(data, sep='\t')  # For txt files
-                    
+                        df = pd.read_csv(data, sep='\t')
                     st.success("✅ Data successfully loaded")
                     st.session_state.current_df = df
                     st.session_state.data_loaded = True
@@ -361,115 +356,141 @@ def web():
             else:
                 st.info("👆 Please upload a dataset to continue")
                 return
-                
-        # Use container_width instead of column_width
-        st.dataframe(df.head(50), use_container_width=True)  # Fixed here
 
-        if st.checkbox("Display Shape"):
-            st.write(df.shape)
-        
-        if st.checkbox("Display columns"):
-            st.write(df.columns)
-        
-        selected_columns = st.multiselect("Select Preferred columns for EDA:", df.columns)
-        if selected_columns:
-            df1 = df[selected_columns]
-            st.dataframe(df1, use_container_width=True)
+        # Basic info
+        st.write(f"**Shape:** {df.shape}")
+        st.dataframe(df.head(10), use_container_width=True)
 
-        if st.checkbox("Display summary statistics"):
-            st.write(df1.describe(include='all').T)
+        # Missing values
+        missing = df.isnull().sum()
+        missing = missing[missing > 0]
+        if not missing.empty:
+            st.write("**Missing Values:**")
+            st.dataframe(missing.to_frame('Missing Values'), use_container_width=True)
+        else:
+            st.write("No missing values found.")
 
-        if st.checkbox("Show missing values in selected columns"):
-            missing = df1.isnull().sum()
-            st.dataframe(missing[missing > 0].to_frame('Missing Values'), use_container_width=True)
+        # Auto-detect text column
+        text_col = None
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                avg_len = df[col].astype(str).str.len().mean()
+                if avg_len > 50:
+                    text_col = col
+                    break
 
-        if st.checkbox("Generate WordCloud for Text Columns by Sentiment"):
-            text_columns = [col for col in selected_columns if df1[col].dtype == 'object']
-            rating_column = st.selectbox("Select the rating/sentiment column:", df.columns)
+        # Auto-detect sentiment/rating columns
+        potential_sentiment_cols = [col for col in df.columns if 'sentiment' in col.lower() or 'label' in col.lower()]
+        rating_cols = [col for col in df.columns if 'rating' in col.lower() or 'score' in col.lower()]
 
-            if rating_column:
-                try:
-                    # Check if the column contains categorical sentiment values
-                    unique_values = df[rating_column].dropna().unique()
-                    
-                    # Check for common sentiment categories (case-insensitive)
-                    categorical_sentiments = set(['positive', 'negative', 'pos', 'neg', 'good', 'bad'])
-                    is_categorical = any(str(val).lower() in categorical_sentiments for val in unique_values)
-                    
-                    if is_categorical:
-                        # Handle categorical sentiment values
-                        df[rating_column] = df[rating_column].astype(str).str.lower()
-                        
-                        # Define positive and negative categories
-                        positive_categories = ['positive', 'pos', 'good']
-                        negative_categories = ['negative', 'neg', 'bad']
-                        
-                        # Create masks for positive and negative sentiments
-                        pos_mask = df[rating_column].isin(positive_categories)
-                        neg_mask = df[rating_column].isin(negative_categories)
-                        
-                        pos_df = df[pos_mask]
-                        neg_df = df[neg_mask]
-                        
-                        st.write(f"Found categorical sentiments. Positive: {pos_df.shape[0]} records, Negative: {neg_df.shape[0]} records")
-                        
+        st.write(f"**Detected — Text column:** `{text_col}`  |  **Sentiment columns:** {potential_sentiment_cols}  |  **Rating columns:** {rating_cols}")
+
+        if text_col is None:
+            st.info("No text column with avg length > 50 auto-detected. Select one manually:")
+            text_col = st.selectbox("Text column:", [c for c in df.columns if df[c].dtype == 'object'])
+
+        # Drop null text rows
+        before = len(df)
+        df = df.dropna(subset=[text_col])
+        if before - len(df) > 0:
+            st.write(f"Dropped {before - len(df)} rows with null text.")
+
+        # Text length & word count histograms (notebook-style)
+        df['text_length'] = df[text_col].astype(str).apply(len)
+        df['word_count'] = df[text_col].astype(str).apply(lambda x: len(x.split()))
+
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        axes[0].hist(df['text_length'], bins=50, edgecolor='black')
+        axes[0].set_title('Text Length Distribution')
+        axes[0].set_xlabel('Length (chars)')
+        axes[0].set_ylabel('Frequency')
+
+        axes[1].hist(df['word_count'], bins=50, edgecolor='black', color='orange')
+        axes[1].set_title('Word Count Distribution')
+        axes[1].set_xlabel('Word Count')
+        axes[1].set_ylabel('Frequency')
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close(fig)
+
+        # Class distribution bar plot
+        target_col = None
+        if rating_cols:
+            target_col = rating_cols[0]
+        elif potential_sentiment_cols:
+            target_col = potential_sentiment_cols[0]
+
+        if target_col is not None and target_col in df.columns:
+            st.subheader(f"Class Distribution — {target_col}")
+            if df[target_col].dtype == 'object':
+                vals = df[target_col].astype(str).str.lower()
+                st.write(vals.value_counts())
+                fig, ax = plt.subplots(figsize=(6, 4))
+                vals.value_counts().plot(kind='bar', ax=ax)
+                ax.set_title(f'Class Distribution — {target_col}')
+                ax.set_xlabel(target_col)
+                ax.set_ylabel('Count')
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close(fig)
+            else:
+                num_vals = pd.to_numeric(df[target_col], errors='coerce')
+                st.write(num_vals.value_counts().sort_index())
+                fig, ax = plt.subplots(figsize=(6, 4))
+                num_vals.value_counts().sort_index().plot(kind='bar', ax=ax)
+                ax.set_title(f'Class Distribution — {target_col}')
+                ax.set_xlabel(target_col)
+                ax.set_ylabel('Count')
+                plt.tight_layout()
+                st.pyplot(fig)
+                plt.close(fig)
+
+        # Word Cloud (notebook-style: max_words=100, width=500, head(500), 2 subplots)
+        if target_col is not None and target_col in df.columns:
+            st.subheader("Word Cloud by Sentiment")
+            try:
+                # Determine positive/negative split
+                pos_df = pd.DataFrame()
+                neg_df = pd.DataFrame()
+
+                if df[target_col].dtype == 'object':
+                    cat_vals = df[target_col].astype(str).str.lower()
+                    pos_cats = {'positive', 'pos', 'good'}
+                    neg_cats = {'negative', 'neg', 'bad'}
+                    pos_df = df[cat_vals.isin(pos_cats)]
+                    neg_df = df[cat_vals.isin(neg_cats)]
+                else:
+                    num_vals = pd.to_numeric(df[target_col], errors='coerce')
+                    if num_vals.nunique() == 2 and set(num_vals.dropna().unique()) == {0, 1}:
+                        pos_df = df[num_vals == 1]
+                        neg_df = df[num_vals == 0]
                     else:
-                        # Handle numeric rating values
-                        df[rating_column] = pd.to_numeric(df[rating_column], errors='coerce')
-                        median_rating = df[rating_column].median()
-                        pos_df = df[df[rating_column] >= median_rating]
-                        neg_df = df[df[rating_column] < median_rating]
-                        
-                        st.write(f"Using median split at {median_rating}. Positive: {pos_df.shape[0]} records, Negative: {neg_df.shape[0]} records")
+                        med = num_vals.median()
+                        pos_df = df[num_vals >= med]
+                        neg_df = df[num_vals < med]
 
-                    # Generate word clouds for each text column
-                    for col in text_columns:
-                        if pos_df.empty or neg_df.empty:
-                            st.warning(f"Insufficient data for sentiment split in column {col}")
-                            continue
-                        
-                        # Combine text for positive sentiment
-                        pos_text = pos_df[col].dropna().astype(str).str.cat(sep=' ')
-                        # Combine text for negative sentiment
-                        neg_text = neg_df[col].dropna().astype(str).str.cat(sep=' ')
-                        
-                        # Check if there's enough text to generate word clouds
-                        if len(pos_text.strip()) == 0 or len(neg_text.strip()) == 0:
-                            st.warning(f"Insufficient text data for word cloud generation in column {col}")
-                            continue
+                if not pos_df.empty and not neg_df.empty:
+                    pos_text = ' '.join(pos_df[text_col].astype(str).head(500))
+                    neg_text = ' '.join(neg_df[text_col].astype(str).head(500))
 
-                        # Generate word clouds
-                        pos_wc = WordCloud(width=800, height=400, background_color='white', 
-                                        colormap='Greens').generate(pos_text)
-                        neg_wc = WordCloud(width=800, height=400, background_color='white', 
-                                        colormap='Reds').generate(neg_text)
-
-                        # Display positive word cloud
-                        st.write(f"**Positive WordCloud for {col}:**")
-                        fig1, ax1 = plt.subplots(figsize=(10, 5))
-                        ax1.imshow(pos_wc, interpolation='bilinear')
-                        ax1.axis('off')
-                        ax1.set_title('Positive Sentiment', fontsize=16, fontweight='bold')
-                        st.pyplot(fig1)
-                        plt.close(fig1)
-
-                        # Display negative word cloud
-                        st.write(f"**Negative WordCloud for {col}:**")
-                        fig2, ax2 = plt.subplots(figsize=(10, 5))
-                        ax2.imshow(neg_wc, interpolation='bilinear')
-                        ax2.axis('off')
-                        ax2.set_title('Negative Sentiment', fontsize=16, fontweight='bold')
-                        st.pyplot(fig2)
-                        plt.close(fig2)
-
-
-            
-
-                except Exception as e:
-                    st.error(f"Failed to process sentiment word clouds: {e}")
-                    st.write("Please ensure your data contains either:")
-                    st.write("- Numeric ratings for median-based splitting, or")
-                    st.write("- Categorical values like 'positive', 'negative', 'pos', 'neg', 'good', 'bad'")
+                    fig, axes = plt.subplots(1, 2, figsize=(16, 7))
+                    wc_pos = WordCloud(width=500, height=400, background_color='white',
+                                       colormap='Greens', max_words=100).generate(pos_text)
+                    axes[0].imshow(wc_pos, interpolation='bilinear')
+                    axes[0].axis('off')
+                    axes[0].set_title('Positive Reviews')
+                    wc_neg = WordCloud(width=500, height=400, background_color='white',
+                                       colormap='Reds', max_words=100).generate(neg_text)
+                    axes[1].imshow(wc_neg, interpolation='bilinear')
+                    axes[1].axis('off')
+                    axes[1].set_title('Negative Reviews')
+                    plt.tight_layout()
+                    st.pyplot(fig)
+                    plt.close(fig)
+                else:
+                    st.info("Could not split data into positive/negative classes for word cloud.")
+            except Exception as e:
+                st.error(f"Word cloud generation failed: {e}")
         
 
         
