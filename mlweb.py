@@ -26,7 +26,6 @@ except LookupError:
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
 
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.tree import DecisionTreeClassifier
@@ -168,12 +167,6 @@ def clean_text(text, stop_words):
     lemmatizer = WordNetLemmatizer()
     lemmatized = [lemmatizer.lemmatize(w) for w in filtered]
     return ' '.join(lemmatized)
-
-class LemmaTokenizer:
-    def __init__(self):
-        self.wordnetlemma = WordNetLemmatizer()
-    def __call__(self, reviews):
-        return [self.wordnetlemma.lemmatize(word) for word in word_tokenize(reviews)]
 
 
 def web():
@@ -696,7 +689,6 @@ def web():
         # --- Vectorizer Settings ---
         st.sidebar.header("Vectorizer Settings")
         vectorizer_type = st.sidebar.selectbox("Choose Vectorizer", ["CountVectorizer", "TF-IDF"])
-        use_lemma_tokenizer = st.sidebar.checkbox("Use LemmaTokenizer (lemmatizes during vectorization)", value=True)
         ngram_min = st.sidebar.slider("N-gram Range Start", 1, 5, 1)
         ngram_max = st.sidebar.slider("N-gram Range End", ngram_min, 7, 3)
         min_df = st.sidebar.slider("Min Document Frequency", 1, 20, 10)
@@ -717,11 +709,7 @@ def web():
 
         # Vectorization
         try:
-            tok = LemmaTokenizer() if use_lemma_tokenizer else None
             kw = dict(ngram_range=(ngram_min, ngram_max), min_df=min_df, max_features=max_features)
-            if use_lemma_tokenizer:
-                kw['analyzer'] = 'word'
-                kw['tokenizer'] = LemmaTokenizer()
 
             if vectorizer_type == "CountVectorizer":
                 vect = CountVectorizer(**kw)
@@ -880,6 +868,7 @@ def web():
                     
                     # Make predictions
                     y_pred = clf.predict(x_test)
+                    st.session_state.y_pred = y_pred
                     
                     # Calculate metrics
                     accuracy = accuracy_score(y_test, y_pred)
@@ -990,26 +979,6 @@ def web():
                         else:
                             st.info(f"{classifier_name} does not support probability predictions.")
 
-                    # --- False Positive / False Negative Analysis ---
-                    with st.expander("🔍 False Positive / False Negative Analysis", expanded=False):
-                        fp = np.where((y_pred == 1) & (y_test == 0))[0]
-                        fn = np.where((y_pred == 0) & (y_test == 1))[0]
-                        st.write(f"**False Positives:** {len(fp)}  |  **False Negatives:** {len(fn)}")
-                        if st.checkbox("Show False Positive examples", key=f"show_fp_{classifier_name}"):
-                            x_test_texts = st.session_state.get("x_test_texts", None)
-                            if x_test_texts is not None:
-                                for idx in fp[:10]:
-                                    st.text(f"[{idx}] {x_test_texts[idx][:300]}")
-                            else:
-                                st.info("Test texts not available. Re-run Feature Engineering.")
-                        if st.checkbox("Show False Negative examples", key=f"show_fn_{classifier_name}"):
-                            x_test_texts = st.session_state.get("x_test_texts", None)
-                            if x_test_texts is not None:
-                                for idx in fn[:10]:
-                                    st.text(f"[{idx}] {x_test_texts[idx][:300]}")
-                            else:
-                                st.info("Test texts not available. Re-run Feature Engineering.")
-
                     # --- Download Trained Model ---
                     with st.expander("💾 Download Trained Model", expanded=False):
                         buf_model = io.BytesIO()
@@ -1023,8 +992,14 @@ def web():
                             key=f"download_model_{classifier_name}"
                         )
                         buf_vect = io.BytesIO()
-                        joblib.dump(st.session_state.vectorizer, buf_vect)
+                        vect_for_dl = st.session_state.vectorizer
+                        orig_tokenizer = getattr(vect_for_dl, 'tokenizer', None)
+                        if orig_tokenizer is not None:
+                            vect_for_dl.tokenizer = None
+                        joblib.dump(vect_for_dl, buf_vect)
                         buf_vect.seek(0)
+                        if orig_tokenizer is not None:
+                            vect_for_dl.tokenizer = orig_tokenizer
                         st.download_button(
                             label="⬇️ Download Vectorizer (.joblib)",
                             data=buf_vect,
@@ -1033,6 +1008,29 @@ def web():
                             key=f"download_vect_{classifier_name}"
                         )
 
+
+            # --- False Positive / False Negative Analysis ---
+            if st.session_state.get("y_pred") is not None and st.session_state.get("y_test") is not None:
+                with st.expander("🔍 False Positive / False Negative Analysis", expanded=False):
+                    y_pred_s = st.session_state.y_pred
+                    y_test_s = st.session_state.y_test
+                    fp = np.where((y_pred_s == 1) & (y_test_s == 0))[0]
+                    fn = np.where((y_pred_s == 0) & (y_test_s == 1))[0]
+                    st.write(f"**False Positives:** {len(fp)}  |  **False Negatives:** {len(fn)}")
+                    if st.checkbox("Show False Positive examples", key=f"show_fp_outside_{classifier_name}"):
+                        x_test_texts = st.session_state.get("x_test_texts", None)
+                        if x_test_texts is not None:
+                            for idx in fp[:10]:
+                                st.text(f"[{idx}] {x_test_texts[idx][:300]}")
+                        else:
+                            st.info("Test texts not available. Re-run Feature Engineering.")
+                    if st.checkbox("Show False Negative examples", key=f"show_fn_outside_{classifier_name}"):
+                        x_test_texts = st.session_state.get("x_test_texts", None)
+                        if x_test_texts is not None:
+                            for idx in fn[:10]:
+                                st.text(f"[{idx}] {x_test_texts[idx][:300]}")
+                        else:
+                            st.info("Test texts not available. Re-run Feature Engineering.")
 
             # --- Real-time Prediction ---
             if st.session_state.get("trained_model") is not None:
