@@ -34,6 +34,7 @@ from sklearn.ensemble import AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, f1_score, precision_score, recall_score, accuracy_score, confusion_matrix, ConfusionMatrixDisplay, roc_curve, roc_auc_score
 import joblib
+import io
 
 # Enhanced session state management
 def initialize_session_state():
@@ -939,18 +940,22 @@ def web():
 
                     # --- Download Trained Model ---
                     with st.expander("💾 Download Trained Model", expanded=False):
-                        model_bytes = joblib.dumps(clf)
+                        buf_model = io.BytesIO()
+                        joblib.dump(clf, buf_model)
+                        buf_model.seek(0)
                         st.download_button(
                             label="⬇️ Download Model (.joblib)",
-                            data=model_bytes,
+                            data=buf_model,
                             file_name=f"{classifier_name.lower().replace(' ', '_')}_model.joblib",
                             mime="application/octet-stream",
                             key=f"download_model_{classifier_name}"
                         )
-                        vect_bytes = joblib.dumps(st.session_state.vectorizer)
+                        buf_vect = io.BytesIO()
+                        joblib.dump(st.session_state.vectorizer, buf_vect)
+                        buf_vect.seek(0)
                         st.download_button(
                             label="⬇️ Download Vectorizer (.joblib)",
-                            data=vect_bytes,
+                            data=buf_vect,
                             file_name=f"{classifier_name.lower().replace(' ', '_')}_vectorizer.joblib",
                             mime="application/octet-stream",
                             key=f"download_vect_{classifier_name}"
