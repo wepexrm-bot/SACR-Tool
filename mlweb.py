@@ -961,30 +961,32 @@ def web():
                             key=f"download_vect_{classifier_name}"
                         )
 
-                    # --- Real-time Prediction ---
-                    with st.expander("🔮 Test with Custom Text", expanded=False):
-                        st.markdown("Type a review below to see what the trained model predicts.")
-                        sample_text = st.text_area("Enter your text:", "", height=100,
-                                                    key=f"sample_text_{classifier_name}")
-                        if st.button("Predict Sentiment", key=f"predict_btn_{classifier_name}"):
-                            if sample_text.strip():
-                                stop_words = get_stopwords()
-                                cleaned = clean_text(sample_text, stop_words)
-                                vec = st.session_state.vectorizer.transform([cleaned])
-                                pred = clf.predict(vec)[0]
-                                if hasattr(clf, "predict_proba"):
-                                    proba = clf.predict_proba(vec)[0]
-                                    confidence = proba[int(pred)]
-                                else:
-                                    confidence = None
+                    # --- Real-time Prediction (outside button block, uses session state) ---
+                    if st.session_state.get("trained_model") is not None:
+                        with st.expander("🔮 Test with Custom Text", expanded=False):
+                            st.markdown("Type a review below to see what the trained model predicts.")
+                            sample_text = st.text_area("Enter your text:", "", height=100,
+                                                        key=f"sample_text_{classifier_name}")
+                            if st.button("Predict Sentiment", key=f"predict_btn_{classifier_name}"):
+                                if sample_text.strip():
+                                    stop_words = get_stopwords()
+                                    cleaned = clean_text(sample_text, stop_words)
+                                    vec = st.session_state.vectorizer.transform([cleaned])
+                                    model = st.session_state.trained_model
+                                    pred = model.predict(vec)[0]
+                                    if hasattr(model, "predict_proba"):
+                                        proba = model.predict_proba(vec)[0]
+                                        confidence = proba[int(pred)]
+                                    else:
+                                        confidence = None
 
-                                label = "✅ Positive" if pred == 1 else "❌ Negative"
-                                st.success(f"**Prediction:** {label}")
-                                if confidence is not None:
-                                    st.metric("Confidence", f"{confidence:.2%}")
-                                st.caption(f"Cleaned text: _{cleaned[:200]}{'...' if len(cleaned) > 200 else ''}_")
-                            else:
-                                st.warning("Please enter some text to analyze.")
+                                    label = "✅ Positive" if pred == 1 else "❌ Negative"
+                                    st.success(f"**Prediction:** {label}")
+                                    if confidence is not None:
+                                        st.metric("Confidence", f"{confidence:.2%}")
+                                    st.caption(f"Cleaned text: _{cleaned[:200]}{'...' if len(cleaned) > 200 else ''}_")
+                                else:
+                                    st.warning("Please enter some text to analyze.")
 
 
     elif option == 'Model Comparison':
