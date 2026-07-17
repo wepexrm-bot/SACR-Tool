@@ -5,4 +5,4 @@ __pycache__/
 .DS_Store
 *.pdf
 sacr_results_*
-Notebook/
+# Notebook/  # uncomment to exclude notebooks from git
