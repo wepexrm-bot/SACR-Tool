@@ -6,63 +6,9 @@ A **Streamlit** web application for performing end-to-end sentiment analysis on 
 
 ## Architecture Overview
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        SACR Tool (mlweb.py)                         │
-│                                                                     │
-│  ┌────────────────┐   ┌──────────────┐   ┌──────────────────────┐  │
-│  │  Sidebar Nav   │──▶│  Session     │──▶│  Page Router        │  │
-│  │  7 Sections    │   │  State Mgmt  │   │  (7 tabs)           │  │
-│  └────────────────┘   └──────────────┘   └──────────────────────┘  │
-│                                                    │               │
-│                    ┌───────────────────────────────┼───────────┐   │
-│                    ▼                               ▼           │   │
-│  ┌─────────────────────────┐      ┌──────────────────────────┐ │   │
-│  │ Data Preprocessing      │      │ EDA & Visualization      │ │   │
-│  │ • Upload CSV/Excel/JSON │      │ • Summary stats          │ │   │
-│  │ • Validate data         │──────▶• WordCloud by sentiment  │ │   │
-│  │ • Clean text (URLs,     │      │ • Distribution plots     │ │   │
-│  │   HTML, special chars,  │      │ • N-gram analysis        │ │   │
-│  │   stopwords)            │      │ • Class imbalance check  │ │   │
-│  │ • Progress bar support  │      └──────────────────────────┘ │   │
-│  │ • Sentiment conversion  │                                    │   │
-│  └─────────────────────────┘                                    │   │
-│           │                                                     │   │
-│           ▼                                                     │   │
-│  ┌──────────────────────────────────────────────────────────┐   │   │
-│  │ Feature Engineering                                       │   │   │
-│  │ • Lemmatization via NLTK WordNetLemmatizer                │   │   │
-│  │ • Binary labeling (good/excellent/positive → 1 else 0)    │   │   │
-│  │ • Vectorization: CountVectorizer OR TF-IDF                │   │   │
-│  │   (configurable n-gram range, min_df, max_features)       │   │   │
-│  │ • Train/test split with optional custom ratio             │   │   │
-│  │ • Chi-squared feature importance                          │   │   │
-│  └──────────────────────────────────────────────────────────┘   │   │
-│           │                                                     │   │
-│           ▼                                                     │   │
-│  ┌──────────────────────────────────────────────────────────┐   │   │
-│  │ Models (5 classifiers with hyperparameter tuning)         │   │   │
-│  │                                                           │   │   │
-│  │  Logistic Regression ←─── Decision Tree ←─── Random Forest│   │   │
-│  │         ↑                       ↑                ↑        │   │   │
-│  │         │                       │                │        │   │   │
-│  │    AdaBoost ←─── Multinomial Naive Bayes                  │   │   │
-│  │                                                           │   │   │
-│  │ Metrics: Accuracy, Precision, Recall, F1-Score            │   │   │
-│  │ Exports: CSV, PDF (via FPDF)                              │   │   │
-│  └──────────────────────────────────────────────────────────┘   │   │
-│           │                                                     │   │
-│           ▼                                                     │   │
-│  ┌──────────────────────────────────────────────────────────┐   │   │
-│  │ Model Comparison                                          │   │   │
-│  │ • Side-by-side table with heatmap highlights              │   │   │
-│  │ • Performance bar charts (all 4 metrics)                  │   │   │
-│  │ • Training time comparison                                │   │   │
-│  │ • "Quick Train All" button                                │   │   │
-│  • Best model recommendation                                  │   │   │
-│  └──────────────────────────────────────────────────────────┘   │   │
-└─────────────────────────────────────────────────────────────────────┘
-```
+<img src="mermaid-flow.svg" alt="Architecture Diagram" width="100%">
+
+
 
 ---
 

@@ -26,6 +26,7 @@ except LookupError:
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
 
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.tree import DecisionTreeClassifier
@@ -129,14 +130,33 @@ st.title("SACR Tool (Sentiment Analysis on Customer Review)")
 
 def get_stopwords():
     custom_stopwords = set(stopwords.words('english'))
+    # Keep 'not' (critical for sentiment negation)
+    custom_stopwords.discard('not')
+    # Add modal verbs that don't carry sentiment
+    custom_stopwords.update({'would', 'shall', 'could', 'might'})
     neutral_words = {'organization', 'company', 'work', 'worked', 'employee', 'employer', 'working', 'firm'}
     return custom_stopwords.union(neutral_words)
 
 # Define text preprocessing function
+def contraction_expansion(content):
+    content = re.sub(r"won\'t", "would not", content)
+    content = re.sub(r"can\'t", "can not", content)
+    content = re.sub(r"don\'t", "do not", content)
+    content = re.sub(r"shouldn\'t", "should not", content)
+    content = re.sub(r"needn\'t", "need not", content)
+    content = re.sub(r"hasn\'t", "has not", content)
+    content = re.sub(r"haven\'t", "have not", content)
+    content = re.sub(r"weren\'t", "were not", content)
+    content = re.sub(r"mightn\'t", "might not", content)
+    content = re.sub(r"didn\'t", "did not", content)
+    content = re.sub(r"n\'t", " not", content)
+    return content
+
 def clean_text(text, stop_words):
     if not isinstance(text, str):
         return ''
 
+    text = contraction_expansion(text)
     text = contractions.fix(text)
     text = re.sub(r'http\S+|www\S+', '', text)  # Remove URLs
     text = re.sub(r'<.*?>', '', text)  # Remove HTML tags
@@ -145,7 +165,15 @@ def clean_text(text, stop_words):
     text = re.sub(r'\s+', ' ', text).strip()
     tokens = text.split()
     filtered = [word for word in tokens if word not in stop_words]
-    return ' '.join(filtered)
+    lemmatizer = WordNetLemmatizer()
+    lemmatized = [lemmatizer.lemmatize(w) for w in filtered]
+    return ' '.join(lemmatized)
+
+class LemmaTokenizer:
+    def __init__(self):
+        self.wordnetlemma = WordNetLemmatizer()
+    def __call__(self, reviews):
+        return [self.wordnetlemma.lemmatize(word) for word in word_tokenize(reviews)]
 
 
 def web():
@@ -621,9 +649,13 @@ def web():
         st.sidebar.header("Column Selection")
         text_col = st.sidebar.selectbox("Select Text Column", df.columns)
 
+        # Detect rating/sentiment columns
+        rating_cols = [col for col in df.columns if 'rating' in col.lower() or 'score' in col.lower()]
+        sentiment_cols = [col for col in df.columns if 'sentiment' in col.lower() or 'label' in col.lower()]
+
         # --- Fast Preprocessing ---
         st.subheader("🧹 Preprocessing & Lemmatization (Optimized)")
-        stop_words = set(stopwords.words('english'))
+        stop_words = get_stopwords()
         lemmatizer = WordNetLemmatizer()
 
         @st.cache_data(show_spinner=False)
@@ -638,19 +670,37 @@ def web():
 
         # --- Fast Labeling ---
         st.subheader("🏷️ Binary Labeling")
-        df['label'] = np.where(
-            df['processed_text'].str.contains(r'\b(good|excellent|positive)\b', case=False, na=False),
-            1, 0
-        )
+        label_method = st.selectbox("Labeling strategy:",
+            ["Keyword-based (good/excellent/positive)", "From rating column (7-10 pos, 1-4 neg)",
+             "From existing 0/1 column"])
+        if 'rating' in label_method.lower() and rating_cols:
+            target_col = rating_cols[0]
+            if df[target_col].max() > 1:
+                df['Label_temp'] = df[target_col].apply(lambda x: 1 if x >= 7 else (0 if x <= 4 else 2))
+                dropped = (df['Label_temp'] == 2).sum()
+                df = df[df['Label_temp'] < 2].copy()
+                df['label'] = df['Label_temp'].astype(int)
+                df.drop(columns=['Label_temp'], inplace=True)
+                st.info(f"Dropped {dropped} neutral reviews (rating 5-6)")
+            else:
+                df['label'] = df[target_col].astype(int)
+        elif '0/1' in label_method.lower() and rating_cols:
+            df['label'] = df[rating_cols[0]].astype(int)
+        else:
+            df['label'] = np.where(
+                df['processed_text'].str.contains(r'\b(good|excellent|positive|amazing|great|wonderful)\b', case=False, na=False),
+                1, 0
+            )
         st.dataframe(df[['processed_text', 'label']].head(10), use_container_width=True)
 
         # --- Vectorizer Settings ---
         st.sidebar.header("Vectorizer Settings")
         vectorizer_type = st.sidebar.selectbox("Choose Vectorizer", ["CountVectorizer", "TF-IDF"])
+        use_lemma_tokenizer = st.sidebar.checkbox("Use LemmaTokenizer (lemmatizes during vectorization)", value=True)
         ngram_min = st.sidebar.slider("N-gram Range Start", 1, 5, 1)
-        ngram_max = st.sidebar.slider("N-gram Range End", ngram_min, 7, ngram_min + 1)
-        min_df = st.sidebar.slider("Min Document Frequency", 1, 20, 5)
-        max_features = st.sidebar.slider("Max Features", 100, 10000, 1000)
+        ngram_max = st.sidebar.slider("N-gram Range End", ngram_min, 7, 3)
+        min_df = st.sidebar.slider("Min Document Frequency", 1, 20, 10)
+        max_features = st.sidebar.slider("Max Features", 100, 10000, 10000)
         # --- Train/Test Split Configuration ---
         st.sidebar.header("Train/Test Split")
         split_option = st.sidebar.radio("Set split manually?", ("Use default (80/20)", "Custom split"))
@@ -667,18 +717,16 @@ def web():
 
         # Vectorization
         try:
+            tok = LemmaTokenizer() if use_lemma_tokenizer else None
+            kw = dict(ngram_range=(ngram_min, ngram_max), min_df=min_df, max_features=max_features)
+            if use_lemma_tokenizer:
+                kw['analyzer'] = 'word'
+                kw['tokenizer'] = LemmaTokenizer()
+
             if vectorizer_type == "CountVectorizer":
-                vect = CountVectorizer(
-                    ngram_range=(ngram_min, ngram_max),
-                    min_df=min_df,
-                    max_features=max_features
-                )
+                vect = CountVectorizer(**kw)
             else:
-                vect = TfidfVectorizer(
-                    ngram_range=(ngram_min, ngram_max),
-                    min_df=min_df,
-                    max_features=max_features
-                )
+                vect = TfidfVectorizer(**kw)
 
             # Fit and split
             X = vect.fit_transform(clean_df['processed_text'])
@@ -693,6 +741,10 @@ def web():
             st.session_state.vectorizer = vect
             st.session_state.vectorizer_type = vectorizer_type
             st.session_state.feature_engineering_done = True
+
+            # Store original test texts for FP/FN analysis
+            _, test_idx, _, _ = train_test_split(np.arange(len(clean_df)), y, test_size=test_size, random_state=42)
+            st.session_state.x_test_texts = clean_df['processed_text'].iloc[test_idx].values
 
             st.success("✅ Vectorization and labeling complete!")
             st.write(f"X_train shape: {x_train.shape}")
@@ -938,6 +990,26 @@ def web():
                         else:
                             st.info(f"{classifier_name} does not support probability predictions.")
 
+                    # --- False Positive / False Negative Analysis ---
+                    with st.expander("🔍 False Positive / False Negative Analysis", expanded=False):
+                        fp = np.where((y_pred == 1) & (y_test == 0))[0]
+                        fn = np.where((y_pred == 0) & (y_test == 1))[0]
+                        st.write(f"**False Positives:** {len(fp)}  |  **False Negatives:** {len(fn)}")
+                        if st.checkbox("Show False Positive examples", key=f"show_fp_{classifier_name}"):
+                            x_test_texts = st.session_state.get("x_test_texts", None)
+                            if x_test_texts is not None:
+                                for idx in fp[:10]:
+                                    st.text(f"[{idx}] {x_test_texts[idx][:300]}")
+                            else:
+                                st.info("Test texts not available. Re-run Feature Engineering.")
+                        if st.checkbox("Show False Negative examples", key=f"show_fn_{classifier_name}"):
+                            x_test_texts = st.session_state.get("x_test_texts", None)
+                            if x_test_texts is not None:
+                                for idx in fn[:10]:
+                                    st.text(f"[{idx}] {x_test_texts[idx][:300]}")
+                            else:
+                                st.info("Test texts not available. Re-run Feature Engineering.")
+
                     # --- Download Trained Model ---
                     with st.expander("💾 Download Trained Model", expanded=False):
                         buf_model = io.BytesIO()
@@ -961,32 +1033,33 @@ def web():
                             key=f"download_vect_{classifier_name}"
                         )
 
-                    # --- Real-time Prediction (outside button block, uses session state) ---
-                    if st.session_state.get("trained_model") is not None:
-                        with st.expander("🔮 Test with Custom Text", expanded=False):
-                            st.markdown("Type a review below to see what the trained model predicts.")
-                            sample_text = st.text_area("Enter your text:", "", height=100,
-                                                        key=f"sample_text_{classifier_name}")
-                            if st.button("Predict Sentiment", key=f"predict_btn_{classifier_name}"):
-                                if sample_text.strip():
-                                    stop_words = get_stopwords()
-                                    cleaned = clean_text(sample_text, stop_words)
-                                    vec = st.session_state.vectorizer.transform([cleaned])
-                                    model = st.session_state.trained_model
-                                    pred = model.predict(vec)[0]
-                                    if hasattr(model, "predict_proba"):
-                                        proba = model.predict_proba(vec)[0]
-                                        confidence = proba[int(pred)]
-                                    else:
-                                        confidence = None
 
-                                    label = "✅ Positive" if pred == 1 else "❌ Negative"
-                                    st.success(f"**Prediction:** {label}")
-                                    if confidence is not None:
-                                        st.metric("Confidence", f"{confidence:.2%}")
-                                    st.caption(f"Cleaned text: _{cleaned[:200]}{'...' if len(cleaned) > 200 else ''}_")
-                                else:
-                                    st.warning("Please enter some text to analyze.")
+            # --- Real-time Prediction ---
+            if st.session_state.get("trained_model") is not None:
+                with st.expander("🔮 Test with Custom Text", expanded=True):
+                    st.markdown("Type a review below to see what the trained model predicts.")
+                    sample_text = st.text_area("Enter your text:", "", height=100,
+                                                key=f"sample_text_{classifier_name}")
+                    if st.button("Predict Sentiment", key=f"predict_btn_{classifier_name}"):
+                        if sample_text.strip():
+                            stop_words = get_stopwords()
+                            cleaned = clean_text(sample_text, stop_words)
+                            vec = st.session_state.vectorizer.transform([cleaned])
+                            model = st.session_state.trained_model
+                            pred = model.predict(vec)[0]
+                            if hasattr(model, "predict_proba"):
+                                proba = model.predict_proba(vec)[0]
+                                confidence = proba[int(pred)]
+                            else:
+                                confidence = None
+
+                            label = "✅ Positive" if pred == 1 else "❌ Negative"
+                            st.success(f"**Prediction:** {label}")
+                            if confidence is not None:
+                                st.metric("Confidence", f"{confidence:.2%}")
+                            st.caption(f"Cleaned text: _{cleaned[:200]}{'...' if len(cleaned) > 200 else ''}_")
+                        else:
+                            st.warning("Please enter some text to analyze.")
 
 
     elif option == 'Model Comparison':
