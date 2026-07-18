@@ -121,44 +121,54 @@ def eda_section():
     if target_col is not None and target_col in df.columns:
         st.subheader("Word Cloud by Sentiment")
         try:
-            pos_df = pd.DataFrame()
-            neg_df = pd.DataFrame()
+            # Determine classes present from session or auto-detect
+            class_names = st.session_state.get("class_names", None)
+            neutral_present = class_names is not None and 'neutral' in class_names
 
+            class_dfs = {}
             if df[target_col].dtype == 'object':
                 cat_vals = df[target_col].astype(str).str.lower()
                 pos_cats = {'positive', 'pos', 'good'}
                 neg_cats = {'negative', 'neg', 'bad'}
-                pos_df = df[cat_vals.isin(pos_cats)]
-                neg_df = df[cat_vals.isin(neg_cats)]
+                neu_cats = {'neutral', 'neu'}
+                class_dfs['positive'] = df[cat_vals.isin(pos_cats)]
+                class_dfs['negative'] = df[cat_vals.isin(neg_cats)]
+                if neutral_present:
+                    class_dfs['neutral'] = df[cat_vals.isin(neu_cats)]
             else:
                 num_vals = pd.to_numeric(df[target_col], errors='coerce')
-                if num_vals.nunique() == 2 and set(num_vals.dropna().unique()) == {0, 1}:
-                    pos_df = df[num_vals == 1]
-                    neg_df = df[num_vals == 0]
+                uniq = sorted(num_vals.dropna().unique())
+                if neutral_present:
+                    class_dfs['positive'] = df[num_vals >= 7]
+                    class_dfs['negative'] = df[num_vals <= 4]
+                    class_dfs['neutral'] = df[(num_vals >= 5) & (num_vals <= 6)]
+                elif num_vals.nunique() == 2 and set(num_vals.dropna().unique()).issubset({0, 1}):
+                    class_dfs['positive'] = df[num_vals == 1]
+                    class_dfs['negative'] = df[num_vals == 0]
                 else:
                     med = num_vals.median()
-                    pos_df = df[num_vals >= med]
-                    neg_df = df[num_vals < med]
+                    class_dfs['positive'] = df[num_vals >= med]
+                    class_dfs['negative'] = df[num_vals < med]
 
-            if not pos_df.empty and not neg_df.empty:
-                pos_text = ' '.join(pos_df[text_col].astype(str).head(500))
-                neg_text = ' '.join(neg_df[text_col].astype(str).head(500))
-
-                fig, axes = plt.subplots(1, 2, figsize=(16, 7))
-                wc_pos = WordCloud(width=500, height=400, background_color='white',
-                                   colormap='Greens', max_words=100).generate(pos_text)
-                axes[0].imshow(wc_pos, interpolation='bilinear')
-                axes[0].axis('off')
-                axes[0].set_title('Positive Reviews')
-                wc_neg = WordCloud(width=500, height=400, background_color='white',
-                                   colormap='Reds', max_words=100).generate(neg_text)
-                axes[1].imshow(wc_neg, interpolation='bilinear')
-                axes[1].axis('off')
-                axes[1].set_title('Negative Reviews')
+            sentiment_order = ['positive', 'neutral', 'negative']
+            present = [s for s in sentiment_order if s in class_dfs and not class_dfs[s].empty]
+            if present:
+                colors = {'positive': 'Greens', 'neutral': 'Blues', 'negative': 'Reds'}
+                n = len(present)
+                fig, axes = plt.subplots(1, n, figsize=(7 * n, 7))
+                if n == 1:
+                    axes = [axes]
+                for i, cls in enumerate(present):
+                    text = ' '.join(class_dfs[cls][text_col].astype(str).head(500))
+                    wc = WordCloud(width=500, height=400, background_color='white',
+                                   colormap=colors[cls], max_words=100).generate(text)
+                    axes[i].imshow(wc, interpolation='bilinear')
+                    axes[i].axis('off')
+                    axes[i].set_title(f'{cls.title()} Reviews', fontsize=14, color=colors[cls].replace('s', ''))
                 plt.tight_layout()
                 st.pyplot(fig)
                 plt.close(fig)
             else:
-                st.info("Could not split data into positive/negative classes for word cloud.")
+                st.info("Could not split data into sentiment classes for word cloud.")
         except Exception as e:
             st.error(f"Word cloud generation failed: {e}")
