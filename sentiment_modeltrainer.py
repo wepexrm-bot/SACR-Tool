@@ -1,4 +1,7 @@
 import streamlit as st
+
+st.set_page_config(page_title="SACR Tool — Complete Pipeline", layout="wide")
+
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -36,9 +39,6 @@ for res_name in ['punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
         nltk.data.find(f'taggers/{res_name}')
     except LookupError:
         nltk.download(res_name)
-
-
-st.set_page_config(page_title="SACR Tool — Complete Pipeline", layout="wide")
 st.title("SACR Tool — Complete Sentiment Analysis Pipeline")
 st.markdown("Mirrors the full 5‑phase notebook. Upload → automatic run → test at the bottom.")
 
