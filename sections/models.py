@@ -13,6 +13,7 @@ from sklearn.naive_bayes import MultinomialNB
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import label_binarize
 from utils import get_stopwords, clean_text
 
 
@@ -31,9 +32,13 @@ def models_section():
         x_test = st.session_state.x_test
         y_train = st.session_state.y_train
         y_test = st.session_state.y_test
+        class_names = st.session_state.get("class_names", ["Negative", "Positive"])
+        n_classes = len(class_names)
 
         st.sidebar.header("🎛️ Model Configuration")
         seed = st.sidebar.slider('Random Seed', 1, 200, 42)
+        use_balanced = st.sidebar.checkbox("Use class_weight='balanced'", value=True,
+                                           help="Automatically adjust weights inversely proportional to class frequencies.")
         classifier_name = st.sidebar.selectbox('Select your preferred classifier:',
                                             ('Logistic Regression', 'Decision Tree', 'Random Forest', 'AdaBoost', 'Naive Bayes'))
 
@@ -61,26 +66,26 @@ def models_section():
         params = add_parameters(classifier_name)
 
         def get_classifier(name_of_clf, params):
+            bw = 'balanced' if use_balanced and name_of_clf != 'Naive Bayes' else None
             if name_of_clf == 'Logistic Regression':
                 return LogisticRegression(
-                    C=params['C'],
-                    max_iter=params.get('max_iter', 100),
+                    C=params['C'], max_iter=params.get('max_iter', 100),
                     solver=params.get('solver', 'liblinear'),
-                    random_state=seed
+                    random_state=seed, class_weight=bw
                 )
             elif name_of_clf == 'Decision Tree':
                 return DecisionTreeClassifier(
                     max_depth=params['max_depth'],
                     min_samples_split=params.get('min_samples_split', 2),
                     criterion=params.get('criterion', 'gini'),
-                    random_state=seed
+                    random_state=seed, class_weight=bw
                 )
             elif name_of_clf == 'Random Forest':
                 return RandomForestClassifier(
                     n_estimators=params['n_estimators'],
                     max_depth=params['max_depth'],
                     min_samples_split=params.get('min_samples_split', 2),
-                    random_state=seed
+                    random_state=seed, class_weight=bw
                 )
             elif name_of_clf == 'AdaBoost':
                 return AdaBoostClassifier(
@@ -108,9 +113,15 @@ def models_section():
                 st.session_state.y_pred = y_pred
 
                 accuracy = accuracy_score(y_test, y_pred)
-                precision = precision_score(y_test, y_pred, average='weighted')
-                recall = recall_score(y_test, y_pred, average='weighted')
-                f1 = f1_score(y_test, y_pred, average='weighted')
+                precision_w = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+                recall_w = recall_score(y_test, y_pred, average='weighted', zero_division=0)
+                f1_w = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+                f1_macro = f1_score(y_test, y_pred, average='macro', zero_division=0)
+
+                # Leakage sanity check
+                if accuracy >= 0.999:
+                    st.error(f"⚠️ Accuracy of {accuracy:.4f} is suspiciously perfect — likely data leakage. "
+                             "Check that train/test split happened BEFORE vectorization.")
 
                 st.success(f"✅ {classifier_name} Training Completed!")
 
@@ -118,25 +129,28 @@ def models_section():
                 with col1:
                     st.metric("Accuracy", f"{accuracy:.4f}")
                 with col2:
-                    st.metric("Precision", f"{precision:.4f}")
+                    st.metric("Precision (w)", f"{precision_w:.4f}")
                 with col3:
-                    st.metric("Recall", f"{recall:.4f}")
+                    st.metric("Recall (w)", f"{recall_w:.4f}")
                 with col4:
-                    st.metric("F1-Score", f"{f1:.4f}")
+                    st.metric("F1 (weighted)", f"{f1_w:.4f}")
 
+                st.metric("F1 (macro)", f"{f1_macro:.4f}")
                 st.info(f"⏱️ Training Time: {training_time:.2f} seconds")
 
                 st.subheader("📋 Detailed Classification Report")
-                report = classification_report(y_test, y_pred, output_dict=True)
+                report = classification_report(y_test, y_pred, target_names=class_names,
+                                               output_dict=True, zero_division=0)
                 report_df = pd.DataFrame(report).transpose()
                 st.dataframe(report_df, use_container_width=True)
 
                 model_result = {
                     'Model': classifier_name,
                     'Accuracy': accuracy,
-                    'Precision': precision,
-                    'Recall': recall,
-                    'F1_Score': f1,
+                    'Precision': precision_w,
+                    'Recall': recall_w,
+                    'F1_Score': f1_w,
+                    'F1_Macro': f1_macro,
                     'Training_Time': training_time,
                     'Parameters': params
                 }
@@ -147,9 +161,11 @@ def models_section():
                     'model_type': classifier_name,
                     'vectorizer_type': type(st.session_state.vectorizer).__name__,
                     'accuracy': accuracy,
-                    'precision': precision,
-                    'recall': recall,
-                    'f1_score': f1,
+                    'precision': precision_w,
+                    'recall': recall_w,
+                    'f1_score': f1_w,
+                    'f1_macro': f1_macro,
+                    'classes': class_names,
                     'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 results_df = pd.DataFrame([export_data])
@@ -182,27 +198,43 @@ def models_section():
 
                 with st.expander("📊 Confusion Matrix", expanded=False):
                     cm = confusion_matrix(y_test, y_pred)
-                    fig_cm, ax_cm = plt.subplots(figsize=(5, 4))
-                    ConfusionMatrixDisplay(cm, display_labels=['Negative', 'Positive']).plot(ax=ax_cm)
+                    fig_cm, ax_cm = plt.subplots(figsize=(5 + n_classes, 4 + n_classes // 2))
+                    ConfusionMatrixDisplay(cm, display_labels=class_names).plot(ax=ax_cm, cmap='Blues', values_format='d')
                     plt.tight_layout()
                     st.pyplot(fig_cm)
 
                 with st.expander("📈 ROC-AUC Curve", expanded=False):
                     if hasattr(clf, "predict_proba"):
-                        y_prob = clf.predict_proba(x_test)[:, 1]
-                        fpr, tpr, _ = roc_curve(y_test, y_prob)
-                        auc_score = roc_auc_score(y_test, y_prob)
-
-                        fig_roc, ax_roc = plt.subplots(figsize=(6, 5))
-                        ax_roc.plot(fpr, tpr, label=f"ROC curve (AUC = {auc_score:.4f})")
-                        ax_roc.plot([0, 1], [0, 1], "k--", label="Random")
-                        ax_roc.set_xlabel("False Positive Rate")
-                        ax_roc.set_ylabel("True Positive Rate")
-                        ax_roc.set_title("ROC Curve")
-                        ax_roc.legend()
-                        plt.tight_layout()
-                        st.pyplot(fig_roc)
-                        st.metric("AUC Score", f"{auc_score:.4f}")
+                        y_prob = clf.predict_proba(x_test)
+                        if n_classes == 2:
+                            fpr, tpr, _ = roc_curve(y_test, y_prob[:, 1])
+                            auc_score = roc_auc_score(y_test, y_prob[:, 1])
+                            fig_roc, ax_roc = plt.subplots(figsize=(6, 5))
+                            ax_roc.plot(fpr, tpr, label=f"ROC curve (AUC = {auc_score:.4f})")
+                            ax_roc.plot([0, 1], [0, 1], "k--", label="Random")
+                            ax_roc.set_xlabel("False Positive Rate")
+                            ax_roc.set_ylabel("True Positive Rate")
+                            ax_roc.set_title(f"ROC Curve — {classifier_name}")
+                            ax_roc.legend()
+                            plt.tight_layout()
+                            st.pyplot(fig_roc)
+                            st.metric("AUC Score", f"{auc_score:.4f}")
+                        else:
+                            y_test_bin = label_binarize(y_test, classes=range(n_classes))
+                            auc_macro = roc_auc_score(y_test_bin, y_prob, average='macro', multi_class='ovr')
+                            fig_roc, ax_roc = plt.subplots(figsize=(7, 6))
+                            for i, cname in enumerate(class_names):
+                                fpr, tpr, _ = roc_curve(y_test_bin[:, i], y_prob[:, i])
+                                ca = roc_auc_score(y_test_bin[:, i], y_prob[:, i])
+                                ax_roc.plot(fpr, tpr, label=f'{cname} (AUC={ca:.3f})')
+                            ax_roc.plot([0, 1], [0, 1], "k--", label="Random")
+                            ax_roc.set_xlabel("False Positive Rate")
+                            ax_roc.set_ylabel("True Positive Rate")
+                            ax_roc.set_title(f"ROC Curves (OvR) — {classifier_name}")
+                            ax_roc.legend()
+                            plt.tight_layout()
+                            st.pyplot(fig_roc)
+                            st.metric("Macro-average AUC", f"{auc_macro:.4f}")
                     else:
                         st.info(f"{classifier_name} does not support probability predictions.")
 
@@ -234,28 +266,30 @@ def models_section():
                         key=f"download_vect_{classifier_name}"
                     )
 
-        # --- False Positive / False Negative Analysis ---
+        # --- Misclassification Analysis (generalized to N classes) ---
         if st.session_state.get("y_pred") is not None and st.session_state.get("y_test") is not None:
-            with st.expander("🔍 False Positive / False Negative Analysis", expanded=False):
+            with st.expander("🔍 Misclassification Analysis", expanded=False):
                 y_pred_s = st.session_state.y_pred
                 y_test_s = st.session_state.y_test
-                fp = np.where((y_pred_s == 1) & (y_test_s == 0))[0]
-                fn = np.where((y_pred_s == 0) & (y_test_s == 1))[0]
-                st.write(f"**False Positives:** {len(fp)}  |  **False Negatives:** {len(fn)}")
-                if st.checkbox("Show False Positive examples", key=f"show_fp_outside_{classifier_name}"):
-                    x_test_texts = st.session_state.get("x_test_texts", None)
-                    if x_test_texts is not None:
-                        for idx in fp[:10]:
-                            st.text(f"[{idx}] {x_test_texts[idx][:300]}")
-                    else:
-                        st.info("Test texts not available. Re-run Feature Engineering.")
-                if st.checkbox("Show False Negative examples", key=f"show_fn_outside_{classifier_name}"):
-                    x_test_texts = st.session_state.get("x_test_texts", None)
-                    if x_test_texts is not None:
-                        for idx in fn[:10]:
-                            st.text(f"[{idx}] {x_test_texts[idx][:300]}")
-                    else:
-                        st.info("Test texts not available. Re-run Feature Engineering.")
+                x_test_texts = st.session_state.get("x_test_texts", None)
+
+                mis_idx = np.where(y_pred_s != y_test_s)[0]
+                st.write(f"**Total misclassified:** {len(mis_idx)} / {len(y_test_s)} ({len(mis_idx)/len(y_test_s):.1%})")
+
+                for true_cls in range(n_classes):
+                    for pred_cls in range(n_classes):
+                        if true_cls == pred_cls:
+                            continue
+                        idxs = np.where((y_test_s == true_cls) & (y_pred_s == pred_cls))[0]
+                        if len(idxs) == 0:
+                            continue
+                        label = f"True: {class_names[true_cls]} → Pred: {class_names[pred_cls]} ({len(idxs)} cases)"
+                        if st.checkbox(label, key=f"mis_{true_cls}_{pred_cls}_{classifier_name}"):
+                            if x_test_texts is not None:
+                                for idx in idxs[:10]:
+                                    st.text(f"[{idx}] {x_test_texts[idx][:200]}")
+                            else:
+                                st.info("Test texts not available.")
 
         # --- Real-time Prediction ---
         if st.session_state.get("trained_model") is not None:
@@ -270,16 +304,13 @@ def models_section():
                         vec = st.session_state.vectorizer.transform([cleaned])
                         model = st.session_state.trained_model
                         pred = model.predict(vec)[0]
+                        label = class_names[pred] if pred < len(class_names) else ("Positive" if pred == 1 else "Negative")
+
+                        st.success(f"**Prediction:** {label}")
                         if hasattr(model, "predict_proba"):
                             proba = model.predict_proba(vec)[0]
-                            confidence = proba[int(pred)]
-                        else:
-                            confidence = None
-
-                        label = "✅ Positive" if pred == 1 else "❌ Negative"
-                        st.success(f"**Prediction:** {label}")
-                        if confidence is not None:
-                            st.metric("Confidence", f"{confidence:.2%}")
+                            for cname, p in zip(class_names, proba):
+                                st.metric(f"P({cname})", f"{p:.2%}")
                         st.caption(f"Cleaned text: _{cleaned[:200]}{'...' if len(cleaned) > 200 else ''}_")
                     else:
                         st.warning("Please enter some text to analyze.")

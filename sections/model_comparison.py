@@ -19,8 +19,12 @@ def model_comparison_section():
         if st.checkbox("📈 Show Performance Charts"):
             results_df = pd.DataFrame(st.session_state.models_results)
 
-            metrics = ['Accuracy', 'Precision', 'Recall', 'F1_Score']
-            fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+            metrics = [m for m in ['Accuracy', 'Precision', 'Recall', 'F1_Score', 'F1_Macro'] if m in results_df.columns]
+            n_plots = len(metrics)
+            n_cols = 3 if n_plots > 4 else 2
+            n_rows = -(-n_plots // n_cols)
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(7 * n_cols, 5 * n_rows))
+            axes = axes.ravel()
             axes = axes.ravel()
 
             for i, metric in enumerate(metrics):

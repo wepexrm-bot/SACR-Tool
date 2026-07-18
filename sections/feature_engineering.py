@@ -8,6 +8,7 @@ from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.feature_selection import chi2
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 from utils import get_stopwords
 
 
@@ -43,29 +44,50 @@ def feature_engineering_section():
     df['processed_text'] = fast_preprocess(df[text_col])
     st.dataframe(df[['processed_text']].head(10), use_container_width=True)
 
-    st.subheader("🏷️ Binary Labeling")
+    st.subheader("🏷️ Labeling")
+    include_neutral = st.checkbox("Keep neutral class (ratings 5-6) as 3rd class", value=False,
+                                  help="If checked, ratings 5-6 become a neutral class instead of being dropped.")
+
     label_method = st.selectbox("Labeling strategy:",
         ["Keyword-based (good/excellent/positive)", "From rating column (7-10 pos, 1-4 neg)",
          "From existing 0/1 column"])
+
     if 'rating' in label_method.lower() and rating_cols:
         target_col = rating_cols[0]
         if df[target_col].max() > 1:
-            df['Label_temp'] = df[target_col].apply(lambda x: 1 if x >= 7 else (0 if x <= 4 else 2))
-            dropped = (df['Label_temp'] == 2).sum()
-            df = df[df['Label_temp'] < 2].copy()
-            df['label'] = df['Label_temp'].astype(int)
-            df.drop(columns=['Label_temp'], inplace=True)
-            st.info(f"Dropped {dropped} neutral reviews (rating 5-6)")
+            def map_rating(x):
+                if x >= 7:
+                    return 'positive'
+                elif x <= 4:
+                    return 'negative'
+                else:
+                    return 'neutral'
+            df['label_raw'] = df[target_col].apply(map_rating)
+            if not include_neutral:
+                n_neutral = (df['label_raw'] == 'neutral').sum()
+                df = df[df['label_raw'] != 'neutral'].copy()
+                st.info(f"Dropped {n_neutral} neutral reviews (rating 5-6). Check 'Keep neutral class' to keep them.")
+            else:
+                st.info("Keeping neutral reviews (ratings 5-6) as a 3rd class.")
         else:
-            df['label'] = df[target_col].astype(int)
+            df['label_raw'] = df[target_col].map({0: 'negative', 1: 'positive'})
     elif '0/1' in label_method.lower() and rating_cols:
-        df['label'] = df[rating_cols[0]].astype(int)
+        df['label_raw'] = df[rating_cols[0]].map({0: 'negative', 1: 'positive'})
     else:
-        df['label'] = np.where(
+        df['label_raw'] = np.where(
             df['processed_text'].str.contains(r'\b(good|excellent|positive|amazing|great|wonderful)\b', case=False, na=False),
-            1, 0
+            'positive', 'negative'
         )
-    st.dataframe(df[['processed_text', 'label']].head(10), use_container_width=True)
+
+    df = df.dropna(subset=['label_raw']).copy()
+
+    le = LabelEncoder()
+    df['label'] = le.fit_transform(df['label_raw'])
+    class_names = list(le.classes_)
+    st.session_state.class_names = class_names
+    st.write(f"**Classes detected:** {class_names}")
+    st.write(f"**Label distribution:** {df['label_raw'].value_counts().to_dict()}")
+    st.dataframe(df[['processed_text', 'label_raw', 'label']].head(10), use_container_width=True)
 
     st.sidebar.header("Vectorizer Settings")
     vectorizer_type = st.sidebar.selectbox("Choose Vectorizer", ["CountVectorizer", "TF-IDF"])
@@ -83,7 +105,8 @@ def feature_engineering_section():
     else:
         test_size = 0.2
 
-    clean_df = df.dropna(subset=['processed_text', 'label'])
+    clean_df = df.dropna(subset=['processed_text', 'label']).copy()
+    clean_df = clean_df[clean_df['processed_text'].str.strip() != '']
 
     try:
         kw = dict(ngram_range=(ngram_min, ngram_max), min_df=min_df, max_features=max_features)
@@ -93,9 +116,15 @@ def feature_engineering_section():
         else:
             vect = TfidfVectorizer(**kw)
 
-        X = vect.fit_transform(clean_df['processed_text'])
-        y = clean_df['label']
-        x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+        # Split BEFORE vectorization to prevent data leakage
+        train_df, test_df = train_test_split(
+            clean_df, test_size=test_size, random_state=42, stratify=clean_df['label']
+        )
+
+        x_train = vect.fit_transform(train_df['processed_text'])
+        x_test = vect.transform(test_df['processed_text'])
+        y_train = train_df['label'].values
+        y_test = test_df['label'].values
 
         st.session_state.x_train = x_train
         st.session_state.x_test = x_test
@@ -105,12 +134,12 @@ def feature_engineering_section():
         st.session_state.vectorizer_type = vectorizer_type
         st.session_state.feature_engineering_done = True
 
-        _, test_idx, _, _ = train_test_split(np.arange(len(clean_df)), y, test_size=test_size, random_state=42)
-        st.session_state.x_test_texts = clean_df['processed_text'].iloc[test_idx].values
+        st.session_state.x_test_texts = test_df['processed_text'].values
 
-        st.success("✅ Vectorization and labeling complete!")
-        st.write(f"X_train shape: {x_train.shape}")
+        st.success("✅ Vectorization and labeling complete! (No data leakage — vectorizer fit on train only)")
+        st.write(f"X_train shape: {x_train.shape}, X_test shape: {x_test.shape}")
         st.write(f"y_train distribution: {dict(zip(*np.unique(y_train, return_counts=True)))}")
+        st.write(f"y_test distribution: {dict(zip(*np.unique(y_test, return_counts=True)))}")
 
     except ValueError as e:
         st.error(f"❌ Vectorization failed: {e}")
