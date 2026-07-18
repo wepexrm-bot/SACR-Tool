@@ -90,13 +90,11 @@ source .venv/bin/activate    # Linux/Mac
 pip install streamlit pandas numpy matplotlib seaborn nltk scikit-learn wordcloud contractions fpdf
 
 # Run the app
-streamlit run mlweb.py
+streamlit run app.py
 ```
 
 ---
 
 ## Notes
 
-- `mlweb.py` is the active version; `main.py` is an older version kept for reference
-- Large virtual environment (`.venv/`) is excluded from version control via `.gitignore`
 - The app uses **session state** to persist data across pages (data, preprocessing, feature engineering, model results)
