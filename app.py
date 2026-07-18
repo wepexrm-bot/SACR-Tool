@@ -6,6 +6,7 @@ from sections.visualisation import visualisation_section
 from sections.feature_engineering import feature_engineering_section
 from sections.models import models_section
 from sections.model_comparison import model_comparison_section
+from sections.explainability import explainability_section
 from sections.about import about_section
 
 
@@ -14,7 +15,7 @@ st.title("SACR Tool (Sentiment Analysis on Customer Review)")
 
 def web():
     initialize_session_state()
-    activities = ['Data Preprocessing', 'EDA', 'Visualisation', 'Feature Engineering', 'Models', 'Model Comparison', 'About Us']
+    activities = ['Data Preprocessing', 'EDA', 'Visualisation', 'Feature Engineering', 'Models', 'Model Comparison', 'Explainability (XAI)', 'About Us']
 
     option = st.sidebar.selectbox("Selection Option:", activities)
 
@@ -56,6 +57,8 @@ def web():
         models_section()
     elif option == 'Model Comparison':
         model_comparison_section()
+    elif option == 'Explainability (XAI)':
+        explainability_section()
     elif option == 'About Us':
         about_section()
 

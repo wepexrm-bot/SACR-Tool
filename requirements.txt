@@ -9,3 +9,5 @@ wordcloud
 contractions
 fpdf
 plotly
+shap
+lime
