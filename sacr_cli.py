@@ -15,9 +15,10 @@ Usage:
   sacr_cli predict --file texts.csv --model-dir <dir>
   sacr_cli explain --model-dir <dir> [--shap] [--lime]
   sacr_cli evaluate --model-dir <dir>
+  sacr_cli reset --model-dir <dir>
 """
 
-import argparse, sys, os, re, time, json, warnings, importlib, importlib.metadata
+import argparse, sys, os, re, time, json, warnings, importlib, importlib.metadata, shutil
 from pathlib import Path
 
 warnings.filterwarnings('ignore')
@@ -742,6 +743,21 @@ def cmd_evaluate(args):
         print(f"\nAll Results:\n{df.to_string(index=False)}")
 
 
+def cmd_reset(args):
+    """Erase all trained model artifacts."""
+    target = Path(args.model_dir)
+    if not target.exists():
+        print(f"No artifacts found at '{args.model_dir}' — nothing to reset.")
+        return
+    if not args.yes:
+        ans = input(f"WARNING: This will permanently delete all files in '{target}'. Continue? [y/N] ").strip().lower()
+        if ans != 'y':
+            print("Reset cancelled.")
+            return
+    shutil.rmtree(target)
+    print(f"All artifacts in '{args.model_dir}' have been deleted.")
+
+
 # ═══════════════════════════════════════════════════════════
 #  MAIN
 # ═══════════════════════════════════════════════════════════
@@ -758,6 +774,7 @@ Examples:
   sacr_cli explain --shap --model-dir my_model
   sacr_cli explain --lime --text "Terrible film, hated it" --model-dir my_model
   sacr_cli evaluate --model-dir my_model
+  sacr_cli reset --model-dir my_model
         """
     )
     parser.add_argument('--version', action='version', version=f"SACR Tool {importlib.metadata.version('sacr-tool')}")
@@ -807,6 +824,12 @@ Examples:
     p_eval = sub.add_parser('evaluate', help='Show evaluation results from a trained model')
     p_eval.add_argument('--model-dir', '-m', default='sacr_model', help='Model artifacts directory')
     p_eval.set_defaults(func=cmd_evaluate)
+
+    # reset
+    p_reset = sub.add_parser('reset', help='Erase all trained model artifacts')
+    p_reset.add_argument('--model-dir', '-m', default='sacr_model', help='Model artifacts directory to erase')
+    p_reset.add_argument('--yes', '-y', action='store_true', help='Skip confirmation prompt')
+    p_reset.set_defaults(func=cmd_reset)
 
     args = parser.parse_args()
     if args.command is None:
