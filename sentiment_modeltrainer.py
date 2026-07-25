@@ -99,9 +99,7 @@ def _clean_text(content):
             tokens.append(wl)
     return ' '.join(tokens)
 
-# Ensure NLTK resources are downloaded before Streamlit UI starts
-with st.spinner("Downloading NLTK resources..."):
-    _ensure_nltk()
+_ensure_nltk()
 
 st.title("SACR Tool — Complete Sentiment Analysis Pipeline")
 st.markdown("Mirrors the full 5‑phase notebook. Upload → automatic run → test at the bottom.")
