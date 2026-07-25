@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sacr-tool"
-version = "1.2.0"
+version = "1.2.1"
 description = "SACR Tool — Complete Sentiment Analysis Pipeline"
 requires-python = ">=3.9"
 dependencies = [
