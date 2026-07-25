@@ -32,11 +32,17 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
 import nltk
-for res_name in ['punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
+# Support both punkt_tab (NLTK 3.9+) and punkt (older NLTK)
+for res_name in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
     try:
-        _ = nltk.data.find(f'tokenizers/{res_name}') if res_name == 'punkt' else \
-            nltk.data.find(f'corpora/{res_name}') if res_name in ('stopwords', 'wordnet') else \
-            nltk.data.find(f'taggers/{res_name}')
+        if res_name in ('punkt_tab', 'punkt'):
+            try:
+                _ = nltk.data.find(f'tokenizers/{res_name}')
+            except LookupError:
+                nltk.download(res_name)
+        else:
+            _ = nltk.data.find(f'corpora/{res_name}') if res_name in ('stopwords', 'wordnet') else \
+                nltk.data.find(f'taggers/{res_name}')
     except LookupError:
         nltk.download(res_name)
 

@@ -28,8 +28,14 @@ import pandas as pd
 
 # ── NLTK setup ────────────────────────────────────────────
 import nltk
-for res in ['punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
-    key = f'tokenizers/{res}' if res == 'punkt' else f'corpora/{res}' if res in ('stopwords','wordnet') else f'taggers/{res}'
+# Support both punkt_tab (NLTK 3.9+) and punkt (older NLTK)
+for res in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
+    if res in ('punkt_tab', 'punkt'):
+        key = f'tokenizers/{res}'
+    elif res in ('stopwords', 'wordnet'):
+        key = f'corpora/{res}'
+    else:
+        key = f'taggers/{res}'
     try:
         nltk.data.find(key)
     except LookupError:
