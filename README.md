@@ -1,3 +1,5 @@
+> Your model training solely depends on how accurate, balanced and unique dataset you can train with.
+
 # SACR Tool — Sentiment Analysis on Customer Reviews
 
 ## Quick Start (CLI)
