@@ -81,7 +81,18 @@ def preprocessing_section():
                         st.success("✅ All sentiment values successfully mapped to binary!")
 
             text_columns = [col for col in df.columns if df[col].dtype == 'object']
-            selected_cols = st.multiselect("Select columns to use for text analysis:", text_columns)
+
+            # Auto-detect text column (avg length > 50 chars heuristic)
+            default_text_cols = []
+            for col in text_columns:
+                avg_len = df[col].astype(str).str.len().mean()
+                if avg_len > 50:
+                    default_text_cols.append(col)
+            if not default_text_cols and text_columns:
+                default_text_cols = [text_columns[0]]
+
+            selected_cols = st.multiselect("Select columns to use for text analysis:", text_columns,
+                                           default=default_text_cols)
 
             if selected_cols:
                 st.subheader("🛠️ Preprocessing Options")
