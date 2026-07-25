@@ -39,15 +39,19 @@ for res_name in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_percept
             try:
                 _ = nltk.data.find(f'tokenizers/{res_name}')
             except LookupError:
-                nltk.download(res_name)
+                nltk.download(res_name, quiet=True)
         else:
             _ = nltk.data.find(f'corpora/{res_name}') if res_name in ('stopwords', 'wordnet') else \
                 nltk.data.find(f'taggers/{res_name}')
     except LookupError:
-        nltk.download(res_name)
+        nltk.download(res_name, quiet=True)
 
 # Module-level stopwords + cleaning (used both in the cached pipeline and for custom predictions)
-_MODEL_STOP_WORDS = set(stopwords.words('english'))
+try:
+    _MODEL_STOP_WORDS = set(stopwords.words('english'))
+except LookupError:
+    nltk.download('stopwords', quiet=True)
+    _MODEL_STOP_WORDS = set(stopwords.words('english'))
 _MODEL_STOP_WORDS.discard('not')
 _MODEL_STOP_WORDS.update(['would', 'shall', 'could', 'might'])
 
