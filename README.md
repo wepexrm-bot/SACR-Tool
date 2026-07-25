@@ -2,23 +2,35 @@
 
 ## Quick Start (CLI)
 
-### Option 1 — Install without cloning (recommended)
+### Linux (Ubuntu / Debian / Mint)
+```bash
+# Option A — pipx (recommended, works globally)
+sudo apt install pipx
+pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git
+
+# Option B — virtual environment
+python3 -m venv ~/.sacr-env
+source ~/.sacr-env/bin/activate
+pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
+# Make alias so 'sacr_cli' works anywhere:
+echo "alias sacr_cli='~/.sacr-env/bin/sacr_cli'" >> ~/.bashrc
+source ~/.bashrc
+```
+
+### Mac
 ```bash
 pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
 ```
-Then type `sacr_cli` in any terminal.
 
-### Option 2 — Clone and install
+### Windows
 ```bash
-git clone https://github.com/wepexrm-bot/SACR-Tool.git
-cd SACR-Tool
+pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
 ```
-- **Windows:** double-click `install.bat` or run `install.bat` in terminal
-- **Mac / Linux:** run `bash install.sh`
+If `sacr_cli` is not recognized, add `C:\Users\%USERNAME%\AppData\Roaming\Python\Python310\Scripts` to your PATH, or run `install.bat` (included in the repo).
 
-Open a **new** terminal and type:
+### Verify
 ```bash
-sacr_cli
+sacr_cli --version
 ```
 
 You'll see:
@@ -31,6 +43,8 @@ You'll see:
 ### How to Update
 ```bash
 pip install --upgrade git+https://github.com/wepexrm-bot/SACR-Tool.git
+# Or with pipx:
+pipx upgrade sacr-tool
 ```
 
 ### CLI Commands
