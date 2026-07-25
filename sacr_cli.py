@@ -29,7 +29,7 @@ import pandas as pd
 # ── NLTK setup ────────────────────────────────────────────
 import nltk
 # Support both punkt_tab (NLTK 3.9+) and punkt (older NLTK)
-for res in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
+for res in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger_eng', 'averaged_perceptron_tagger']:
     if res in ('punkt_tab', 'punkt'):
         key = f'tokenizers/{res}'
     elif res in ('stopwords', 'wordnet'):
@@ -150,6 +150,7 @@ class LemmaTokenizer:
         try:
             ptags = pos_tag(tokens)
         except LookupError:
+            nltk.download('averaged_perceptron_tagger_eng', quiet=True)
             nltk.download('averaged_perceptron_tagger', quiet=True)
             ptags = pos_tag(tokens)
         lemmas = []

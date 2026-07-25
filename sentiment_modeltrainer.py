@@ -43,7 +43,7 @@ def _ensure_nltk():
     if _MODEL_STOP_WORDS is not None:
         return
     # Support both punkt_tab (NLTK 3.9+) and punkt (older NLTK)
-    for res_name in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
+    for res_name in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger_eng', 'averaged_perceptron_tagger']:
         try:
             if res_name in ('punkt_tab', 'punkt'):
                 try:
