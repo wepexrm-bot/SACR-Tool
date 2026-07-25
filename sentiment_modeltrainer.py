@@ -954,7 +954,7 @@ else:
         if hasattr(best_pipeline, 'named_steps'):
             st.code(f"{'Model':<25} {'Prediction':<15} {'Confidence':<10}")
             st.code("-" * 55)
-for name, clf in trained_models.items():
+            for name, clf in trained_models.items():
                 p = clf.predict(vec)[0]
                 lbl = class_names[p]
                 if hasattr(clf, "predict_proba"):
