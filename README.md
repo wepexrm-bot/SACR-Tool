@@ -32,7 +32,13 @@ pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
 # Linux (avoids "externally managed" errors)
 pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git
 ```
-Note: With this method you may need to add the install directory to your PATH manually.
+
+**If `sacr_cli` is not found after pipx install** (common on Linux):
+```bash
+pipx ensurepath
+source ~/.bashrc
+```
+This adds `~/.local/bin` to your PATH permanently. Then `sacr_cli` will work.
 
 ### Verify
 ```bash
