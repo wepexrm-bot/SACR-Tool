@@ -99,8 +99,6 @@ def _clean_text(content):
             tokens.append(wl)
     return ' '.join(tokens)
 
-_ensure_nltk()
-
 st.title("SACR Tool — Complete Sentiment Analysis Pipeline")
 st.markdown("Mirrors the full 5‑phase notebook. Upload → automatic run → test at the bottom.")
 
