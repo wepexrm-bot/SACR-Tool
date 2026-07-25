@@ -5,4 +5,7 @@ __pycache__/
 .DS_Store
 *.pdf
 sacr_results_*
+sacr_model/
+*.egg-info/
+.streamlit/
 # Notebook/  # uncomment to exclude notebooks from git

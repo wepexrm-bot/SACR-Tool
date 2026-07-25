@@ -18,15 +18,20 @@ def explainability_section():
         return
 
     trained = st.session_state.trained_models_all
+    raw_models = st.session_state.get("raw_models_all", trained)
     vect = st.session_state.vectorizer
     x_test = st.session_state.x_test
     y_test = st.session_state.y_test
     class_names = st.session_state.get("class_names", ["Negative", "Positive"])
     n_classes = len(class_names)
 
-    # ── Pick best model ──
-    best_name = max(trained, key=lambda n: trained[n]['f1_weighted'])
+    # ── Pick best model (exclude Voting Ensemble)
+    eligible = {n: v for n, v in trained.items() if n != 'Voting Ensemble'}
+    if not eligible:
+        eligible = trained
+    best_name = max(eligible, key=lambda n: eligible[n]['f1_weighted'])
     best_clf = trained[best_name]['model']
+    raw_best = raw_models.get(best_name, best_clf)
     best_pipeline = Pipeline(steps=[('vect', vect), ('clf', best_clf)])
 
     st.success(f"**Best model:** `{best_name}` (F1-weighted = {trained[best_name]['f1_weighted']:.4f})")
@@ -51,8 +56,10 @@ def explainability_section():
                     X_sample = x_test[idxs]
 
                     # For linear models, use LinearExplainer; otherwise KernelExplainer
-                    if hasattr(best_clf, 'coef_'):
-                        explainer = shap.LinearExplainer(best_clf, X_sample)
+                    if hasattr(raw_best, 'coef_'):
+                        explainer = shap.LinearExplainer(raw_best, X_sample)
+                    elif hasattr(raw_best, 'feature_importances_'):
+                        explainer = shap.TreeExplainer(raw_best, feature_names=vect.get_feature_names_out())
                     else:
                         # Use a background sample for KernelExplainer
                         bg = x_test[rng.choice(x_test.shape[0], min(100, x_test.shape[0]), replace=False)]
@@ -117,8 +124,10 @@ def explainability_section():
                         import shap
                         row = x_test[mis_choice]
                         feature_names = vect.get_feature_names_out()
-                        if hasattr(best_clf, 'coef_'):
-                            explainer = shap.LinearExplainer(best_clf, x_test)
+                        if hasattr(raw_best, 'coef_'):
+                            explainer = shap.LinearExplainer(raw_best, x_test)
+                        elif hasattr(raw_best, 'feature_importances_'):
+                            explainer = shap.TreeExplainer(raw_best, feature_names=feature_names)
                         else:
                             bg = x_test[np.random.RandomState(42).choice(
                                 x_test.shape[0], min(100, x_test.shape[0]), replace=False)]

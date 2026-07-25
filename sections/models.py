@@ -9,12 +9,26 @@ from fpdf import FPDF
 from sklearn.metrics import (accuracy_score, precision_score, recall_score, f1_score,
                              classification_report, confusion_matrix, ConfusionMatrixDisplay,
                              roc_curve, roc_auc_score)
+from sklearn.model_selection import cross_val_score, StratifiedKFold
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, VotingClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.preprocessing import label_binarize
 from utils import get_stopwords, clean_text
+
+try:
+    from imblearn.over_sampling import SMOTE
+    HAS_SMOTE = True
+except ImportError:
+    HAS_SMOTE = False
+
+try:
+    import contractions
+    HAS_CONTRACTIONS = True
+except ImportError:
+    HAS_CONTRACTIONS = False
 
 
 ALL_CLASSIFIERS = {
@@ -30,7 +44,7 @@ ALL_CLASSIFIERS = {
     'AdaBoost': lambda p, s, bw: AdaBoostClassifier(
         n_estimators=p.get('n_estimators', 50), learning_rate=p.get('learning_rate', 1.0),
         random_state=s),
-    'Naive Bayes': lambda p, s, bw: MultinomialNB(alpha=p.get('alpha', 1.0)),
+    'Naive Bayes': lambda p, s, bw: MultinomialNB(alpha=p.get('alpha', 0.5)),
 }
 
 
@@ -103,21 +117,66 @@ def models_section():
     # ── Train All 5 Models ──
     if st.button("Train All 5 Models (for XAI)", type="primary"):
         st.session_state.trained_models_all = {}
+        st.session_state.raw_models_all = {}
         st.session_state.models_results = []
         default_params = {
             'Logistic Regression': {'C': 1.0, 'max_iter': 100, 'solver': 'liblinear'},
             'Decision Tree': {'max_depth': 5, 'min_samples_split': 2, 'criterion': 'gini'},
             'Random Forest': {'n_estimators': 100, 'max_depth': 10, 'min_samples_split': 2},
             'AdaBoost': {'n_estimators': 50, 'learning_rate': 1.0},
-            'Naive Bayes': {'alpha': 1.0},
+            'Naive Bayes': {'alpha': 0.5},
         }
+
+        # Optional GridSearch for Logistic Regression
+        gs_default = default_params.get('Logistic Regression', {})
+        best_c = gs_default.get('C', 1.0)
+        try:
+            from sklearn.model_selection import GridSearchCV
+            param_grid = {'C': [0.01, 0.1, 1, 10, 100]}
+            gs = GridSearchCV(
+                LogisticRegression(max_iter=200, solver='lbfgs', random_state=seed, class_weight='balanced'),
+                param_grid, cv=3, scoring='f1_weighted', n_jobs=-1
+            )
+            gs.fit(x_train, y_train)
+            best_c = gs.best_params_['C']
+        except Exception:
+            pass
+        default_params['Logistic Regression']['C'] = best_c
+
+        # SMOTE resampling
+        if HAS_SMOTE:
+            try:
+                smote = SMOTE(random_state=seed, k_neighbors=5)
+                x_train_s, y_train_s = smote.fit_resample(x_train, y_train)
+            except Exception:
+                x_train_s, y_train_s = x_train, y_train
+        else:
+            x_train_s, y_train_s = x_train, y_train
+
         prog = st.progress(0, text="Training all models...")
         for idx, (name, _) in enumerate(ALL_CLASSIFIERS.items()):
             prog.progress((idx) / len(ALL_CLASSIFIERS), text=f"Training {name}...")
             _train_and_record(name, default_params.get(name, {}), seed, use_balanced,
-                              x_train, y_train, x_test, y_test, class_names,
-                              store_model=True)
+                              x_train_s, y_train_s, x_test, y_test, class_names,
+                              store_model=True, use_smote=False)
         st.session_state.trained_all_models = True
+
+        # Voting Ensemble
+        try:
+            pool = st.session_state.trained_models_all
+            voting_clf = VotingClassifier(
+                estimators=[(n.replace(' ', '_'), pool[n]['model']) for n in pool],
+                voting='soft' if all(hasattr(pool[n]['model'], 'predict_proba') for n in pool) else 'hard'
+            )
+            voting_clf.fit(x_train_s, y_train_s)
+            y_pred_vote = voting_clf.predict(x_test)
+            st.session_state.trained_models_all['Voting Ensemble'] = {
+                'model': voting_clf, 'params': {}, 'accuracy': accuracy_score(y_test, y_pred_vote),
+            }
+            st.session_state.raw_models_all['Voting Ensemble'] = voting_clf
+        except Exception:
+            pass
+
         prog.progress(1.0, text="All models trained!")
         st.success("All 5 models trained and stored for Explainability tab!")
 
@@ -132,9 +191,10 @@ def models_section():
     if st.session_state.trained_models_all or st.session_state.get("trained_model") is not None:
         with st.expander("Feature Importance Analysis", expanded=False):
             models_pool = st.session_state.trained_models_all if st.session_state.trained_models_all else {}
+            raw_pool = st.session_state.get("raw_models_all", {})
             latest = st.session_state.get("trained_model")
             if models_pool:
-                pool = {n: models_pool[n]['model'] for n in models_pool}
+                pool = {n: raw_pool.get(n, models_pool[n]['model']) for n in models_pool}
             else:
                 pool = {classifier_name: latest}
 
@@ -237,10 +297,31 @@ def models_section():
 
 def _train_and_record(name, params, seed, use_balanced,
                       x_train, y_train, x_test, y_test, class_names,
-                      store_model=False):
+                      store_model=False, use_smote=True):
     clf = _make_classifier(name, params, seed, use_balanced)
     start = time.time()
-    clf.fit(x_train, y_train)
+
+    if use_smote and HAS_SMOTE:
+        try:
+            smote = SMOTE(random_state=seed, k_neighbors=5)
+            x_tr, y_tr = smote.fit_resample(x_train, y_train)
+        except Exception:
+            x_tr, y_tr = x_train, y_train
+    else:
+        x_tr, y_tr = x_train, y_train
+
+    clf.fit(x_tr, y_tr)
+    raw_clf = clf
+
+    # Calibration
+    if name != 'Voting Ensemble':
+        try:
+            cal_clf = CalibratedClassifierCV(clf, cv=3)
+            cal_clf.fit(x_tr, y_tr)
+            clf = cal_clf
+        except Exception:
+            pass
+
     elapsed = time.time() - start
     y_pred = clf.predict(x_test)
 
@@ -263,6 +344,13 @@ def _train_and_record(name, params, seed, use_balanced,
     st.metric("F1 (macro)", f"{f1_m:.4f}")
     st.info(f"Training Time: {elapsed:.2f}s")
 
+    # Cross-validation scores
+    try:
+        cv_scores = cross_val_score(clf, x_tr, y_tr, cv=StratifiedKFold(3), scoring='f1_weighted')
+        st.info(f"3-Fold CV F1 (weighted): {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+    except Exception:
+        pass
+
     report = classification_report(y_test, y_pred, target_names=class_names,
                                    output_dict=True, zero_division=0)
     st.dataframe(pd.DataFrame(report).transpose(), use_container_width=True)
@@ -278,6 +366,9 @@ def _train_and_record(name, params, seed, use_balanced,
             'model': clf, 'params': params, 'accuracy': acc,
             'precision': prec, 'recall': rec, 'f1_weighted': f1_w, 'f1_macro': f1_m
         }
+        if 'raw_models_all' not in st.session_state:
+            st.session_state.raw_models_all = {}
+        st.session_state.raw_models_all[name] = raw_clf
     else:
         st.session_state.trained_model = clf
         st.session_state.y_pred = y_pred
@@ -349,3 +440,16 @@ def _train_and_record(name, params, seed, use_balanced,
                        f"{name.lower().replace(' ', '_')}_model.joblib",
                        "application/octet-stream",
                        key=f"dl_model_{name}_{int(time.time())}")
+
+    # Download full Pipeline (vectorizer + classifier together)
+    from sklearn.pipeline import Pipeline as _Pipeline
+    vect = st.session_state.vectorizer
+    full_pipe = _Pipeline(steps=[('vect', vect), ('clf', clf)])
+    buf2 = io.BytesIO()
+    joblib.dump(full_pipe, buf2)
+    buf2.seek(0)
+    st.download_button("Download Full Pipeline (.joblib)", buf2,
+                       "best_pipeline.joblib",
+                       "application/octet-stream",
+                       key=f"dl_pipeline_{name}_{int(time.time())}",
+                       type="primary")

@@ -8,16 +8,27 @@ def preprocessing_section():
     st.subheader("Data Preprocessing")
 
     data = st.file_uploader("Upload dataset:", type=['csv', 'xlsx', 'txt', 'json'])
+    NROWS = st.sidebar.number_input("Max rows to load (0=all)", 0, 1_000_000, 500_000, step=50_000)
+    nrows = NROWS if NROWS > 0 else None
     if data is not None:
         try:
             if data.name.endswith('.csv'):
-                df = pd.read_csv(data)
+                for enc in ['utf-8', 'latin-1', 'cp1252']:
+                    try:
+                        df = pd.read_csv(data, encoding=enc, nrows=nrows)
+                        break
+                    except (UnicodeDecodeError, UnicodeError):
+                        data.seek(0)
+                        continue
+                else:
+                    data.seek(0)
+                    df = pd.read_csv(data, encoding='utf-8', errors='replace', nrows=nrows)
             elif data.name.endswith('.xlsx'):
-                df = pd.read_excel(data)
+                df = pd.read_excel(data, nrows=nrows)
             elif data.name.endswith('.json'):
                 df = pd.read_json(data)
             else:
-                df = pd.read_csv(data, sep='\t')
+                df = pd.read_csv(data, sep='\t', nrows=nrows)
 
             st.success("✅ Data successfully loaded")
 

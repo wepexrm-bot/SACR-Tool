@@ -8,12 +8,12 @@ from nltk.stem import WordNetLemmatizer
 import contractions
 
 try:
-    nltk.data.find('corpora/stopwords')
+    _ = nltk.data.find('corpora/stopwords')
 except LookupError:
     nltk.download('stopwords')
 
 try:
-    nltk.data.find('corpora/wordnet')
+    _ = nltk.data.find('corpora/wordnet')
 except LookupError:
     nltk.download('wordnet')
 
@@ -106,15 +106,25 @@ def contraction_expansion(content):
 def clean_text(text, stop_words):
     if not isinstance(text, str):
         return ''
-    text = contraction_expansion(text)
-    text = contractions.fix(text)
     text = re.sub(r'http\S+|www\S+', '', text)
     text = re.sub(r'<.*?>', '', text)
-    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    text = contraction_expansion(text)
+    text = contractions.fix(text)
+    text = re.sub(r'[^a-zA-Z\s]', ' ', text)
     text = text.lower()
     text = re.sub(r'\s+', ' ', text).strip()
     tokens = text.split()
-    filtered = [word for word in tokens if word not in stop_words]
-    lemmatizer = WordNetLemmatizer()
-    lemmatized = [lemmatizer.lemmatize(w) for w in filtered]
-    return ' '.join(lemmatized)
+    # Negation handling: tag words after not with _NEG suffix
+    result = []
+    negated = False
+    for word in tokens:
+        if word in ('not', 'no', 'never', 'neither', 'nor'):
+            negated = True
+            continue
+        if negated and word not in stop_words:
+            word = word + '_NEG'
+            negated = False
+        if word not in stop_words:
+            lemmatizer = WordNetLemmatizer()
+            result.append(lemmatizer.lemmatize(word))
+    return ' '.join(result)

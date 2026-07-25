@@ -11,6 +11,12 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from utils import get_stopwords
 
+try:
+    import contractions
+    HAS_CONTRACTIONS = True
+except ImportError:
+    HAS_CONTRACTIONS = False
+
 
 def feature_engineering_section():
     st.subheader("Feature Engineering")
@@ -27,8 +33,15 @@ def feature_engineering_section():
     st.sidebar.header("Column Selection")
     text_col = st.sidebar.selectbox("Select Text Column", df.columns)
 
-    rating_cols = [col for col in df.columns if 'rating' in col.lower() or 'score' in col.lower()]
+    NUMERIC_LABEL_KEYWORDS = ['rating', 'score', 'star', 'target', 'polarity', 'class', 'sentiment', 'label']
+    rating_cols = [col for col in df.columns if any(k in col.lower() for k in NUMERIC_LABEL_KEYWORDS)]
     sentiment_cols = [col for col in df.columns if 'sentiment' in col.lower() or 'label' in col.lower()]
+
+    if not sentiment_cols and not rating_cols:
+        for col in df.columns:
+            if col != text_col and pd.api.types.is_numeric_dtype(df[col]) and 2 <= df[col].nunique() <= 10:
+                rating_cols = [col]
+                break
 
     st.subheader("🧹 Preprocessing & Lemmatization (Optimized)")
     stop_words = get_stopwords()
@@ -36,10 +49,31 @@ def feature_engineering_section():
 
     @st.cache_data(show_spinner=False)
     def fast_preprocess(series):
-        pattern = re.compile(r'[^a-zA-Z\s]')
-        return series.astype(str).str.lower()\
-            .str.replace(pattern, '', regex=True)\
-            .apply(lambda x: ' '.join([lemmatizer.lemmatize(w) for w in x.split() if w not in stop_words]))
+        def _clean_text(text):
+            text = str(text).lower()
+            if HAS_CONTRACTIONS:
+                text = contractions.fix(text)
+            text = re.sub(r'https?://\S+|www\.\S+', '', text)
+            text = re.sub(r'<.*?>', ' ', text)
+            text = re.sub(r'[^a-zA-Z\s]', ' ', text)
+            text = re.sub(r'\s+', ' ', text).strip()
+            # Negation handling: tag words after not/no/n't with _NEG suffix
+            text = re.sub(r'\b(not|no|n\'t)\s+(\w+)', lambda m: m.group(2) + '_NEG', text)
+            words = text.split()
+            # POS-aware lemmatization
+            stop_words = get_stopwords()
+            result = []
+            for w in words:
+                if w in stop_words:
+                    continue
+                if w.endswith('_NEG'):
+                    result.append(w)
+                else:
+                    lemmatizer = WordNetLemmatizer()
+                    result.append(lemmatizer.lemmatize(w))
+            return ' '.join(result)
+
+        return series.apply(_clean_text)
 
     df['processed_text'] = fast_preprocess(df[text_col])
     st.dataframe(df[['processed_text']].head(10), use_container_width=True)
@@ -54,11 +88,32 @@ def feature_engineering_section():
 
     if 'rating' in label_method.lower() and rating_cols:
         target_col = rating_cols[0]
-        if df[target_col].max() > 1:
+        vals = df[target_col].dropna()
+        unique_vals = sorted(vals.unique())
+        n_unique = len(unique_vals)
+
+        if n_unique == 2:
+            lo, hi = unique_vals
+            df['label_raw'] = df[target_col].map({lo: 'negative', hi: 'positive'})
+        elif n_unique == 3:
+            lo, mid, hi = unique_vals
+            df['label_raw'] = df[target_col].map({lo: 'negative', mid: 'neutral', hi: 'positive'})
+            if not include_neutral:
+                n_neutral = (df['label_raw'] == 'neutral').sum()
+                df = df[df['label_raw'] != 'neutral'].copy()
+                st.info(f"Dropped {n_neutral} neutral reviews. Check 'Keep neutral class' to keep them.")
+            else:
+                st.info("Keeping neutral reviews as a 3rd class.")
+        else:
+            vmin, vmax = unique_vals[0], unique_vals[-1]
+            rng = vmax - vmin
+            pos_cut = vmin + (2 / 3) * rng
+            neg_cut = vmin + (1 / 3) * rng
+
             def map_rating(x):
-                if x >= 7:
+                if x >= pos_cut:
                     return 'positive'
-                elif x <= 4:
+                elif x <= neg_cut:
                     return 'negative'
                 else:
                     return 'neutral'
@@ -66,11 +121,9 @@ def feature_engineering_section():
             if not include_neutral:
                 n_neutral = (df['label_raw'] == 'neutral').sum()
                 df = df[df['label_raw'] != 'neutral'].copy()
-                st.info(f"Dropped {n_neutral} neutral reviews (rating 5-6). Check 'Keep neutral class' to keep them.")
+                st.info(f"Dropped {n_neutral} neutral reviews. Check 'Keep neutral class' to keep them.")
             else:
-                st.info("Keeping neutral reviews (ratings 5-6) as a 3rd class.")
-        else:
-            df['label_raw'] = df[target_col].map({0: 'negative', 1: 'positive'})
+                st.info("Keeping neutral reviews as a 3rd class.")
     elif '0/1' in label_method.lower() and rating_cols:
         df['label_raw'] = df[rating_cols[0]].map({0: 'negative', 1: 'positive'})
     else:
