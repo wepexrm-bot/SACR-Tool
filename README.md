@@ -57,9 +57,16 @@ pipx upgrade sacr-tool
 ```
 
 ### Uninstall
-- **Windows:** double-click `uninstall.bat` or run `uninstall.bat`
-- **Linux / Mac:** `bash uninstall.sh`
-- Or manually: `pip uninstall sacr-tool -y` / `pipx uninstall sacr-tool`
+From anywhere in terminal:
+```bash
+# Quick way (works from any folder)
+pipx uninstall sacr-tool
+sudo rm /usr/local/bin/sacr_cli
+
+# Or from the repo folder
+bash uninstall.sh    # Linux / Mac
+uninstall.bat        # Windows
+```
 
 ### CLI Commands
 ```bash
