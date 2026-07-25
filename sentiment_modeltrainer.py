@@ -32,28 +32,34 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 
 import nltk
-# Support both punkt_tab (NLTK 3.9+) and punkt (older NLTK)
-for res_name in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
-    try:
-        if res_name in ('punkt_tab', 'punkt'):
-            try:
-                _ = nltk.data.find(f'tokenizers/{res_name}')
-            except LookupError:
-                nltk.download(res_name, quiet=True)
-        else:
-            _ = nltk.data.find(f'corpora/{res_name}') if res_name in ('stopwords', 'wordnet') else \
-                nltk.data.find(f'taggers/{res_name}')
-    except LookupError:
-        nltk.download(res_name, quiet=True)
 
 # Module-level stopwords + cleaning (used both in the cached pipeline and for custom predictions)
-try:
-    _MODEL_STOP_WORDS = set(stopwords.words('english'))
-except LookupError:
-    nltk.download('stopwords', quiet=True)
-    _MODEL_STOP_WORDS = set(stopwords.words('english'))
-_MODEL_STOP_WORDS.discard('not')
-_MODEL_STOP_WORDS.update(['would', 'shall', 'could', 'might'])
+_MODEL_STOP_WORDS = None
+
+def _ensure_nltk():
+    global _MODEL_STOP_WORDS
+    if _MODEL_STOP_WORDS is not None:
+        return
+    # Support both punkt_tab (NLTK 3.9+) and punkt (older NLTK)
+    for res_name in ['punkt_tab', 'punkt', 'stopwords', 'wordnet', 'averaged_perceptron_tagger']:
+        try:
+            if res_name in ('punkt_tab', 'punkt'):
+                try:
+                    _ = nltk.data.find(f'tokenizers/{res_name}')
+                except LookupError:
+                    nltk.download(res_name, quiet=True)
+            else:
+                _ = nltk.data.find(f'corpora/{res_name}') if res_name in ('stopwords', 'wordnet') else \
+                    nltk.data.find(f'taggers/{res_name}')
+        except LookupError:
+            nltk.download(res_name, quiet=True)
+    try:
+        _MODEL_STOP_WORDS = set(stopwords.words('english'))
+    except LookupError:
+        nltk.download('stopwords', quiet=True)
+        _MODEL_STOP_WORDS = set(stopwords.words('english'))
+    _MODEL_STOP_WORDS.discard('not')
+    _MODEL_STOP_WORDS.update(['would', 'shall', 'could', 'might'])
 
 def _contraction_expansion(content):
     content = re.sub(r"won\'t", "would not", content)
@@ -71,11 +77,14 @@ def _contraction_expansion(content):
 
 class _LemmaTokenizer(object):
     def __init__(self):
+        _ensure_nltk()
         self.wordnetlemma = WordNetLemmatizer()
     def __call__(self, reviews):
+        _ensure_nltk()
         return [self.wordnetlemma.lemmatize(word) for word in word_tokenize(reviews)]
 
 def _clean_text(content):
+    _ensure_nltk()
     if not isinstance(content, str):
         return ''
     content = _contraction_expansion(content)
@@ -119,6 +128,7 @@ NROWS = 500_000
 # ────────────────────────────────────────────────────────────
 @st.cache_data(show_spinner=False)
 def run_pipeline(file_bytes, include_neutral, test_size, random_state, vectorizer_type):
+    _ensure_nltk()
     import io as _io
     for enc in ['utf-8', 'latin-1', 'cp1252']:
         try:
