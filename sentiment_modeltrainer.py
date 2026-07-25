@@ -132,13 +132,23 @@ def run_pipeline(file_bytes, include_neutral, test_size, random_state, vectorize
             if df[col].dtype == 'object':
                 text_col = col
                 break
+    if text_col is None:
+        for col in df.columns:
+            if df[col].astype(str).str.len().mean() > 50:
+                text_col = col
+                break
+    if text_col is None:
+        for col in df.columns:
+            if df[col].nunique() > 10:
+                text_col = col
+                break
+    if text_col is None:
+        col_info = {col: f"dtype={df[col].dtype}, nunique={df[col].nunique()}" for col in df.columns}
+        return {'error': f'No text column found. Columns: {col_info}'}
 
     potential_sentiment_cols = [c for c in df.columns if 'sentiment' in c.lower() or 'label' in c.lower()]
     NUMERIC_LABEL_KEYWORDS = ['rating', 'score', 'star', 'target', 'polarity', 'class', 'sentiment', 'label']
     rating_cols = [c for c in df.columns if any(k in c.lower() for k in NUMERIC_LABEL_KEYWORDS)]
-
-    if text_col is None:
-        return {'error': 'No text column found'}
 
     # Fallback: if nothing matched by name, any numeric column with 2-10 distinct values
     if not potential_sentiment_cols and not rating_cols:
