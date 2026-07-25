@@ -12,31 +12,36 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Install
-echo "[1/2] Installing SACR Tool..."
-pip3 install git+https://github.com/wepexrm-bot/SACR-Tool.git
-
-# Detect scripts dir and add to PATH via shell profile
-echo "[2/2] Adding SACR Tool to PATH..."
-SCRIPTS_DIR=$(python3 -c "import site; print(site.USER_BASE)" 2>/dev/null)/bin
-if [ ! -d "$SCRIPTS_DIR" ]; then
-    SCRIPTS_DIR=$(python3 -c "import sys; print(sys.base_exec_prefix)" 2>/dev/null)/bin
+# Install pipx if missing
+if ! command -v pipx &> /dev/null; then
+    echo "[1/3] Installing pipx..."
+    python3 -m pip install --user pipx -q
 fi
 
+# Install the package
+echo "[2/3] Installing SACR Tool..."
+pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git --force
+
+# Add to PATH automatically
+echo "[3/3] Adding to PATH..."
+pipx ensurepath &> /dev/null || true
+
+# Source shell rc so it works immediately in the current session
 SHELL_RC="$HOME/.bashrc"
 if [ -n "$ZSH_VERSION" ]; then
     SHELL_RC="$HOME/.zshrc"
 fi
-
-if ! grep -q "sacr_cli" "$SHELL_RC" 2>/dev/null; then
-    echo "export PATH=\"\$PATH:$SCRIPTS_DIR\"  # SACR Tool" >> "$SHELL_RC"
+if [ -f "$SHELL_RC" ]; then
+    source "$SHELL_RC" 2>/dev/null || true
 fi
+
+export PATH="$HOME/.local/bin:$PATH"
 
 echo ""
 echo "========================================================"
 echo "  INSTALLATION COMPLETE!"
 echo "========================================================"
 echo ""
-echo "  Run this to load it now:  source $SHELL_RC"
-echo "  Then type:                sacr_cli"
+echo "  Try it now:  sacr_cli --version"
+echo "  Or open a new terminal and type:  sacr_cli"
 echo ""

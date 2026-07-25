@@ -35,15 +35,17 @@ if not exist "%SCRIPTS_DIR%" (
 
 REM Add to PATH (user level, no admin needed)
 echo [3/3] Adding SACR Tool to PATH...
-setx PATH "%PATH%;%SCRIPTS_DIR%"
+setx PATH "%PATH%;%SCRIPTS_DIR%" >nul
+
+REM Add to current session too so it works immediately
+set "PATH=%PATH%;%SCRIPTS_DIR%"
 
 echo.
 echo ========================================================
 echo   INSTALLATION COMPLETE!
 echo ========================================================
 echo.
-echo   Close this window, open a NEW PowerShell/CMD and type:
-echo.
-echo       sacr_cli
+echo   Try it now:  sacr_cli --version
+echo   (Close and reopen terminal for permanent effect)
 echo.
 pause
