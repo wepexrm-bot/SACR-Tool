@@ -17,7 +17,7 @@ Usage:
   sacr_cli evaluate --model-dir <dir>
 """
 
-import argparse, sys, os, re, time, json, warnings, importlib
+import argparse, sys, os, re, time, json, warnings, importlib, importlib.metadata
 from pathlib import Path
 
 warnings.filterwarnings('ignore')
@@ -760,7 +760,7 @@ Examples:
   sacr_cli evaluate --model-dir my_model
         """
     )
-    parser.add_argument('--version', action='version', version='SACR Tool 1.0')
+    parser.add_argument('--version', action='version', version=f"SACR Tool {importlib.metadata.version('sacr-tool')}")
 
     sub = parser.add_subparsers(dest='command')
 
