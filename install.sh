@@ -26,7 +26,16 @@ pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git --force
 echo "[3/3] Adding to PATH..."
 pipx ensurepath &> /dev/null || true
 
-# Source shell rc so it works immediately in the current session
+# Create symlink in /usr/local/bin for global access
+if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ] || command -v sudo &> /dev/null; then
+    SRC="$HOME/.local/bin/sacr_cli"
+    if [ -f "$SRC" ]; then
+        sudo ln -sf "$SRC" /usr/local/bin/sacr_cli 2>/dev/null || true
+        echo "  Symlinked to /usr/local/bin/sacr_cli (global)"
+    fi
+fi
+
+# Source shell rc so it works immediately
 SHELL_RC="$HOME/.bashrc"
 if [ -n "$ZSH_VERSION" ]; then
     SHELL_RC="$HOME/.zshrc"
