@@ -2,31 +2,23 @@
 
 ## Quick Start (CLI)
 
-### Linux (Ubuntu / Debian / Mint)
-```bash
-# Option A — pipx (recommended, works globally)
-sudo apt install pipx
-pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git
+### Install — one command, works on all OS
 
-# Option B — virtual environment
-python3 -m venv ~/.sacr-env
-source ~/.sacr-env/bin/activate
-pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
-# Make alias so 'sacr_cli' works anywhere:
-echo "alias sacr_cli='~/.sacr-env/bin/sacr_cli'" >> ~/.bashrc
-source ~/.bashrc
+**Linux / Mac:**
+```bash
+bash install.sh
 ```
 
-### Mac
+**Windows:** double-click `install.bat` or run in terminal:
+```batch
+install.bat
+```
+
+Or install directly without cloning:
 ```bash
 pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
 ```
-
-### Windows
-```bash
-pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
-```
-If `sacr_cli` is not recognized, add `C:\Users\%USERNAME%\AppData\Roaming\Python\Python310\Scripts` to your PATH, or run `install.bat` (included in the repo).
+(Linux users: use `pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git` to avoid "externally managed" errors.)
 
 ### Verify
 ```bash
@@ -40,12 +32,17 @@ You'll see:
 ========================================================
 ```
 
-### How to Update
+### Update
 ```bash
 pip install --upgrade git+https://github.com/wepexrm-bot/SACR-Tool.git
 # Or with pipx:
 pipx upgrade sacr-tool
 ```
+
+### Uninstall
+- **Windows:** double-click `uninstall.bat`
+- **Linux / Mac:** `bash uninstall.sh`
+- Or: `pip uninstall sacr-tool -y`
 
 ### CLI Commands
 ```bash
