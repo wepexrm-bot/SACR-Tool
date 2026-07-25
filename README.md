@@ -1,5 +1,47 @@
 # SACR Tool — Sentiment Analysis on Customer Reviews
 
+## Quick Start (CLI)
+
+Install with one command — no manual PATH setup needed:
+
+**Windows** (double-click `install.bat` or run in terminal):
+```batch
+install.bat
+```
+
+**Mac / Linux**:
+```bash
+bash install.sh
+```
+
+Then open a **new** terminal and run:
+```bash
+sacr_cli
+```
+
+You'll see:
+```
+========================================================
+  WELCOME TO SENTIMENT ANALYSIS REVIEW TOOL
+========================================================
+```
+
+### CLI Commands
+
+```bash
+sacr_cli train reviews.csv --text-col review --label-col rating --out my_model
+sacr_cli predict --text "Great movie!" --model-dir my_model
+sacr_cli explain --shap --model-dir my_model
+sacr_cli evaluate --model-dir my_model
+```
+
+> **Tip:** You can also install directly from GitHub without cloning:
+> ```bash
+> pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
+> ```
+
+---
+
 A **Streamlit** web application for performing end-to-end sentiment analysis on customer review text data. Users upload a dataset, preprocess text, explore it visually, engineer features, train ML classifiers, compare models, and export results.
 
 ---
