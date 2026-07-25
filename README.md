@@ -2,19 +2,21 @@
 
 ## Quick Start (CLI)
 
-Install with one command — no manual PATH setup needed:
-
-**Windows** (double-click `install.bat` or run in terminal):
-```batch
-install.bat
-```
-
-**Mac / Linux**:
+### Option 1 — Install without cloning (recommended)
 ```bash
-bash install.sh
+pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
 ```
+Then type `sacr_cli` in any terminal.
 
-Then open a **new** terminal and run:
+### Option 2 — Clone and install
+```bash
+git clone https://github.com/wepexrm-bot/SACR-Tool.git
+cd SACR-Tool
+```
+- **Windows:** double-click `install.bat` or run `install.bat` in terminal
+- **Mac / Linux:** run `bash install.sh`
+
+Open a **new** terminal and type:
 ```bash
 sacr_cli
 ```
@@ -26,19 +28,18 @@ You'll see:
 ========================================================
 ```
 
-### CLI Commands
+### How to Update
+```bash
+pip install --upgrade git+https://github.com/wepexrm-bot/SACR-Tool.git
+```
 
+### CLI Commands
 ```bash
 sacr_cli train reviews.csv --text-col review --label-col rating --out my_model
 sacr_cli predict --text "Great movie!" --model-dir my_model
 sacr_cli explain --shap --model-dir my_model
 sacr_cli evaluate --model-dir my_model
 ```
-
-> **Tip:** You can also install directly from GitHub without cloning:
-> ```bash
-> pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
-> ```
 
 ---
 
