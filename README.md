@@ -2,34 +2,45 @@
 
 ## Quick Start (CLI)
 
-### Install — one command, works on all OS
+### Prerequisites
+- **Python 3.9+** installed on your system
+- **Git** (only needed if cloning the repo)
 
-**Linux / Mac:**
+### Install
+
+#### Linux / Mac
 ```bash
+git clone https://github.com/wepexrm-bot/SACR-Tool.git
+cd SACR-Tool
 bash install.sh
 ```
+Enter your **sudo password** when prompted — the script creates a global symlink so `sacr_cli` works from any terminal immediately.
 
-**Windows:** double-click `install.bat` or run in terminal:
-```batch
+#### Windows
+```bash
+git clone https://github.com/wepexrm-bot/SACR-Tool.git
+cd SACR-Tool
 install.bat
 ```
+Or double-click `install.bat` in File Explorer. The script adds `sacr_cli` to your PATH automatically.
 
-Or install directly without cloning:
+### Install without cloning (if you prefer)
 ```bash
+# Windows / Mac
 pip install git+https://github.com/wepexrm-bot/SACR-Tool.git
+
+# Linux (avoids "externally managed" errors)
+pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git
 ```
-(Linux users: use `pipx install git+https://github.com/wepexrm-bot/SACR-Tool.git` to avoid "externally managed" errors.)
+Note: With this method you may need to add the install directory to your PATH manually.
 
 ### Verify
 ```bash
 sacr_cli --version
 ```
-
 You'll see:
 ```
-========================================================
-  WELCOME TO SENTIMENT ANALYSIS REVIEW TOOL
-========================================================
+SACR Tool 1.2.1
 ```
 
 ### Update
@@ -40,9 +51,9 @@ pipx upgrade sacr-tool
 ```
 
 ### Uninstall
-- **Windows:** double-click `uninstall.bat`
+- **Windows:** double-click `uninstall.bat` or run `uninstall.bat`
 - **Linux / Mac:** `bash uninstall.sh`
-- Or: `pip uninstall sacr-tool -y`
+- Or manually: `pip uninstall sacr-tool -y` / `pipx uninstall sacr-tool`
 
 ### CLI Commands
 ```bash
