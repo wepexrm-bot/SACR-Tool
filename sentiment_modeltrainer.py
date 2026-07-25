@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 import time
+import traceback
+import sys as _sacr_sys
 import warnings
 import io
 from collections import Counter
@@ -96,6 +98,10 @@ def _clean_text(content):
         if wl not in _MODEL_STOP_WORDS and wl.isalpha():
             tokens.append(wl)
     return ' '.join(tokens)
+
+# Ensure NLTK resources are downloaded before Streamlit UI starts
+with st.spinner("Downloading NLTK resources..."):
+    _ensure_nltk()
 
 st.title("SACR Tool — Complete Sentiment Analysis Pipeline")
 st.markdown("Mirrors the full 5‑phase notebook. Upload → automatic run → test at the bottom.")
@@ -948,11 +954,11 @@ else:
         if hasattr(best_pipeline, 'named_steps'):
             st.code(f"{'Model':<25} {'Prediction':<15} {'Confidence':<10}")
             st.code("-" * 55)
-            for name, clf in trained_models.items():
-                p = best_pipeline.predict([cleaned])[0]
+for name, clf in trained_models.items():
+                p = clf.predict(vec)[0]
                 lbl = class_names[p]
                 if hasattr(clf, "predict_proba"):
-                    proba = best_pipeline.predict_proba([cleaned])[0]
+                    proba = clf.predict_proba(vec)[0]
                     conf = proba[int(p)]
                     probs_str = " | ".join([f"{c}: {proba[i]:.1%}" for i, c in enumerate(class_names)])
                     st.code(f"{name:<25} {lbl:<15} {conf:.2%}")
