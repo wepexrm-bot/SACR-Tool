@@ -16,8 +16,6 @@ dependencies = [
     "scikit-learn",
     "wordcloud",
     "contractions",
-    "shap",
-    "lime",
     "joblib",
     "scipy",
 ]
